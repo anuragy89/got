@@ -43,6 +43,33 @@ async def _is_admin(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> bool:
         return False
 
 
+async def _safe_edit_text(q, text: str, parse_mode=ParseMode.HTML, reply_markup=None):
+    """Edit message text safely — handles photo messages and unchanged content."""
+    try:
+        await q.edit_message_text(
+            text, parse_mode=parse_mode, reply_markup=reply_markup
+        )
+    except BadRequest as e:
+        err = str(e).lower()
+        if "there is no text in the message" in err:
+            # Message is a photo — delete and send new text message instead
+            try:
+                await q.delete_message()
+            except TelegramError:
+                pass
+            try:
+                await q.message.chat.send_message(
+                    text, parse_mode=parse_mode, reply_markup=reply_markup
+                )
+            except TelegramError:
+                pass
+        elif "message is not modified" in err:
+            # Content unchanged — silently ignore
+            pass
+        else:
+            log.warning(f"edit_message_text failed: {e}")
+
+
 async def _end_round(chat_id: int, session: GameSession,
                      ctx: ContextTypes.DEFAULT_TYPE):
     """Finalise a round: post summary, save scores, set cooldown."""
@@ -450,15 +477,17 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
 
     if data == "cb:start":
-        await q.edit_message_text(
+        await _safe_edit_text(
+            q,
             start_private(user.first_name),
-            parse_mode=ParseMode.HTML,
             reply_markup=start_kb(),
         )
 
     elif data == "cb:help":
-        await q.edit_message_text(
-            help_text(), parse_mode=ParseMode.HTML, reply_markup=back_kb()
+        await _safe_edit_text(
+            q,
+            help_text(),
+            reply_markup=back_kb(),
         )
 
     elif data == "cb:leaderboard":
@@ -468,17 +497,17 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         else:
             rows  = await db.group_leaderboard(chat.id)
             title = f"🏆 {chat.title}"
-        await q.edit_message_text(
+        await _safe_edit_text(
+            q,
             leaderboard_text(rows, title),
-            parse_mode=ParseMode.HTML,
             reply_markup=leaderboard_kb(),
         )
 
     elif data == "cb:globalboard":
         rows = await db.global_leaderboard()
-        await q.edit_message_text(
+        await _safe_edit_text(
+            q,
             leaderboard_text(rows, "🌍 Global Leaderboard"),
-            parse_mode=ParseMode.HTML,
             reply_markup=leaderboard_kb(),
         )
 
