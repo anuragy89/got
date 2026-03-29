@@ -35,7 +35,6 @@
       "value": "wordgrid_bot",
       "required": false
     },
-
     "UPDATES_CHANNEL": {
       "description": "Telegram channel link for bot updates",
       "value": "https://t.me/YourChannel",
@@ -51,63 +50,11 @@
       "value": "https://t.me/YourBot?startgroup=true",
       "required": false
     },
-
     "USE_PREMIUM_EMOJI": {
       "description": "Set true to use Telegram premium emoji. Requires bot to have premium emoji access.",
       "value": "false",
       "required": false
     },
-    "PEMOJI_TROPHY": {
-      "description": "Premium emoji ID for trophy. Get from @getidsbot",
-      "value": "5368324170671202286",
-      "required": false
-    },
-    "PEMOJI_FIRE": {
-      "description": "Premium emoji ID for fire",
-      "value": "5368324170671202286",
-      "required": false
-    },
-    "PEMOJI_STAR": {
-      "description": "Premium emoji ID for star",
-      "value": "5368324170671202286",
-      "required": false
-    },
-    "PEMOJI_CROWN": {
-      "description": "Premium emoji ID for crown",
-      "value": "5368324170671202286",
-      "required": false
-    },
-    "PEMOJI_DIAMOND": {
-      "description": "Premium emoji ID for diamond",
-      "value": "5368324170671202286",
-      "required": false
-    },
-    "PEMOJI_LIGHTNING": {
-      "description": "Premium emoji ID for lightning",
-      "value": "5368324170671202286",
-      "required": false
-    },
-    "PEMOJI_PUZZLE": {
-      "description": "Premium emoji ID for puzzle",
-      "value": "5368324170671202286",
-      "required": false
-    },
-    "PEMOJI_ROCKET": {
-      "description": "Premium emoji ID for rocket",
-      "value": "5368324170671202286",
-      "required": false
-    },
-    "PEMOJI_JOYSTICK": {
-      "description": "Premium emoji ID for joystick",
-      "value": "5368324170671202286",
-      "required": false
-    },
-    "PEMOJI_MEDAL": {
-      "description": "Premium emoji ID for medal",
-      "value": "5368324170671202286",
-      "required": false
-    },
-
     "ROUND_DURATION": {
       "description": "Seconds per game round",
       "value": "90",
