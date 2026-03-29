@@ -20,6 +20,7 @@ def start_kb() -> InlineKeyboardMarkup:
 
 
 def theme_kb() -> InlineKeyboardMarkup:
+    # Each theme uses its own emoji for visual colour variety
     rows, row = [], []
     for key in THEME_LIST:
         t = THEMES[key]
@@ -30,7 +31,7 @@ def theme_kb() -> InlineKeyboardMarkup:
             rows.append(row); row = []
     if row:
         rows.append(row)
-    rows.append([InlineKeyboardButton("🎲 Random", callback_data="theme:random")])
+    rows.append([InlineKeyboardButton("🎲 Random Theme", callback_data="theme:random")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -46,13 +47,20 @@ def game_action_kb() -> InlineKeyboardMarkup:
 def leaderboard_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("🌍 Global",   callback_data="cb:globalboard"),
-            InlineKeyboardButton("🔄 Refresh",  callback_data="cb:leaderboard"),
+            InlineKeyboardButton("🌍 Global Board", callback_data="cb:globalboard"),
+            InlineKeyboardButton("🔄 Refresh",       callback_data="cb:leaderboard"),
+        ],
+        [
+            InlineKeyboardButton("🎮 New Game",  callback_data="theme:random"),
+            InlineKeyboardButton("❓ Help",      callback_data="cb:help"),
         ],
     ])
 
 
 def back_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("« Back", callback_data="cb:start")],
+        [
+            InlineKeyboardButton("🎮 Play Now",  callback_data="theme:random"),
+            InlineKeyboardButton("« Back",       callback_data="cb:start"),
+        ],
     ])
