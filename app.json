@@ -1,0 +1,152 @@
+{
+  "name": "WordGrid Bot",
+  "description": "Viral Telegram Word Grid Puzzle Game Bot — themed grids, leaderboards, combo scoring, 10k+ group ready.",
+  "keywords": ["telegram", "bot", "game", "word-grid", "python"],
+  "stack": "heroku-24",
+
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "standard-2x"
+    }
+  },
+
+  "addons": [],
+
+  "env": {
+    "BOT_TOKEN": {
+      "description": "Telegram Bot token from @BotFather",
+      "required": true
+    },
+    "BOT_USERNAME": {
+      "description": "Bot username WITHOUT @ — e.g. WordGridBot",
+      "required": true
+    },
+    "OWNER_ID": {
+      "description": "Your Telegram numeric user ID (get from @userinfobot)",
+      "required": true
+    },
+    "MONGO_URI": {
+      "description": "MongoDB Atlas connection string — mongodb+srv://...",
+      "required": true
+    },
+    "DB_NAME": {
+      "description": "MongoDB database name",
+      "value": "wordgrid_bot",
+      "required": false
+    },
+
+    "UPDATES_CHANNEL": {
+      "description": "Telegram channel link for bot updates",
+      "value": "https://t.me/YourChannel",
+      "required": false
+    },
+    "SUPPORT_GROUP": {
+      "description": "Telegram group link for support",
+      "value": "https://t.me/YourSupport",
+      "required": false
+    },
+    "BOT_INVITE_LINK": {
+      "description": "Bot invite link with startgroup param",
+      "value": "https://t.me/YourBot?startgroup=true",
+      "required": false
+    },
+
+    "USE_PREMIUM_EMOJI": {
+      "description": "Set true to use Telegram premium emoji. Requires bot to have premium emoji access.",
+      "value": "false",
+      "required": false
+    },
+    "PEMOJI_TROPHY": {
+      "description": "Premium emoji ID for trophy. Get from @getidsbot",
+      "value": "5368324170671202286",
+      "required": false
+    },
+    "PEMOJI_FIRE": {
+      "description": "Premium emoji ID for fire",
+      "value": "5368324170671202286",
+      "required": false
+    },
+    "PEMOJI_STAR": {
+      "description": "Premium emoji ID for star",
+      "value": "5368324170671202286",
+      "required": false
+    },
+    "PEMOJI_CROWN": {
+      "description": "Premium emoji ID for crown",
+      "value": "5368324170671202286",
+      "required": false
+    },
+    "PEMOJI_DIAMOND": {
+      "description": "Premium emoji ID for diamond",
+      "value": "5368324170671202286",
+      "required": false
+    },
+    "PEMOJI_LIGHTNING": {
+      "description": "Premium emoji ID for lightning",
+      "value": "5368324170671202286",
+      "required": false
+    },
+    "PEMOJI_PUZZLE": {
+      "description": "Premium emoji ID for puzzle",
+      "value": "5368324170671202286",
+      "required": false
+    },
+    "PEMOJI_ROCKET": {
+      "description": "Premium emoji ID for rocket",
+      "value": "5368324170671202286",
+      "required": false
+    },
+    "PEMOJI_JOYSTICK": {
+      "description": "Premium emoji ID for joystick",
+      "value": "5368324170671202286",
+      "required": false
+    },
+    "PEMOJI_MEDAL": {
+      "description": "Premium emoji ID for medal",
+      "value": "5368324170671202286",
+      "required": false
+    },
+
+    "ROUND_DURATION": {
+      "description": "Seconds per game round",
+      "value": "90",
+      "required": false
+    },
+    "GRID_SIZE": {
+      "description": "Grid size N (NxN grid)",
+      "value": "10",
+      "required": false
+    },
+    "WORDS_PER_ROUND": {
+      "description": "Number of hidden words per round",
+      "value": "8",
+      "required": false
+    },
+    "COOLDOWN_SECONDS": {
+      "description": "Cooldown between rounds in a group",
+      "value": "30",
+      "required": false
+    },
+    "POINTS_PER_LETTER": {
+      "description": "Base points per letter of found word",
+      "value": "10",
+      "required": false
+    },
+    "FIRST_FINDER_BONUS": {
+      "description": "Bonus points for finding the very first word in a round",
+      "value": "25",
+      "required": false
+    },
+    "BROADCAST_DELAY": {
+      "description": "Seconds to wait between broadcast messages (avoid Telegram flood)",
+      "value": "0.05",
+      "required": false
+    }
+  },
+
+  "scripts": {},
+  "buildpacks": [
+    { "url": "heroku/python" }
+  ]
+}
