@@ -16,6 +16,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+from telegram.request import HTTPXRequest
 
 import database as db
 from config import BOT_TOKEN
@@ -40,14 +41,29 @@ log = logging.getLogger("wordgrid")
 
 
 def build_app() -> Application:
+    # Separate request pool for get_updates (long-polling needs longer read timeout)
+    updater_request = HTTPXRequest(
+        connection_pool_size=8,
+        read_timeout=35,
+        write_timeout=30,
+        connect_timeout=30,
+        pool_timeout=30,
+    )
+    # Request pool for all other bot API calls
+    bot_request = HTTPXRequest(
+        connection_pool_size=16,
+        read_timeout=30,
+        write_timeout=30,
+        connect_timeout=30,
+        pool_timeout=30,
+    )
+
     app = (
         Application.builder()
         .token(BOT_TOKEN)
-        .concurrent_updates(True)        # handle multiple groups in parallel
-        .connect_timeout(30)
-        .read_timeout(30)
-        .write_timeout(30)
-        .pool_timeout(30)
+        .request(bot_request)
+        .get_updates_request(updater_request)
+        .concurrent_updates(True)
         .build()
     )
 
@@ -109,8 +125,8 @@ def main():
     app.run_polling(
         drop_pending_updates=True,
         allowed_updates=Update.ALL_TYPES,
-        poll_interval=0,          # fastest possible polling
-        timeout=20,
+        poll_interval=0,
+        timeout=30,         # long-poll timeout sent to Telegram
     )
 
 
