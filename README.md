@@ -18,6 +18,12 @@ A viral Telegram **Word Grid Puzzle Game Bot** — themed grid images, live lead
 
 ## Deploy to Heroku
 
+## 🚀 Quick Deploy to Heroku
+
+[![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/anuragy89/got)
+
+**Manual steps:**
+
 ### 1. Clone & push
 ```bash
 git clone https://github.com/yourname/wordgrid-bot
