@@ -2,32 +2,59 @@ import asyncio
 import time
 import logging
 from typing import Dict, Optional
-from config import ROUND_DURATION, POINTS_PER_LETTER, FIRST_FINDER_BONUS, COMBO_MULTIPLIERS
+from config import POINTS_PER_LETTER, FIRST_FINDER_BONUS, COMBO_MULTIPLIERS
 
 log = logging.getLogger(__name__)
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  ROUND LEVEL TABLE  (12 rounds)
+#  round_num → (duration_secs, words_to_find, grid_size)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ROUND_LEVELS = {
+    1:  (30,  3,  4),
+    2:  (60,  4,  5),
+    3:  (90,  5,  6),
+    4:  (120, 6,  7),
+    5:  (150, 7,  7),
+    6:  (180, 8,  8),
+    7:  (210, 9,  8),
+    8:  (240, 10, 9),
+    9:  (270, 11, 9),
+    10: (300, 12, 10),
+    11: (330, 13, 10),
+    12: (360, 14, 11),
+}
+MAX_ROUNDS = 12
+
+
+def get_level(round_num: int) -> tuple:
+    return ROUND_LEVELS.get(round_num, ROUND_LEVELS[MAX_ROUNDS])
 
 
 class GameSession:
     def __init__(self, chat_id, theme, grid, words, placed, round_num, img_bytes):
-        self.chat_id     = chat_id
-        self.theme       = theme
-        self.grid        = grid
-        self.words       = words          # list[str]
-        self.placed      = placed         # list[{word, cells}]
-        self.round_num   = round_num
-        self.img_bytes   = img_bytes
-        self.found_words : list          = []
-        self.finders     : Dict[str,dict]= {}   # word → {user_id, name, pts, combo}
-        self.p_combos    : Dict[int,int] = {}
-        self.p_scores    : Dict[int,int] = {}
-        self.p_names     : Dict[int,str] = {}
-        self.p_found_cnt : Dict[int,int] = {}
-        self.active      = True
-        self.started_at  = time.time()
-        self.grid_msg_id : Optional[int] = None
-        self._task       : Optional[asyncio.Task] = None
+        self.chat_id      = chat_id
+        self.theme        = theme
+        self.grid         = grid
+        self.words        = words
+        self.placed       = placed
+        self.round_num    = round_num
+        self.img_bytes    = img_bytes
+        self.found_words  : list           = []
+        self.finders      : Dict[str,dict] = {}
+        self.p_combos     : Dict[int,int]  = {}
+        self.p_scores     : Dict[int,int]  = {}
+        self.p_names      : Dict[int,str]  = {}
+        self.p_found_cnt  : Dict[int,int]  = {}
+        self.active       = True
+        self.started_at   = time.time()
+        self.grid_msg_id  : Optional[int]  = None
+        self._task        : Optional[asyncio.Task] = None
 
-    # ── word checking ──
+        duration, n_words, grid_size = get_level(round_num)
+        self.duration  = duration
+        self.grid_size = grid_size
+
     def valid_guess(self, word: str) -> bool:
         return word in self.words and word not in self.found_words
 
@@ -55,7 +82,7 @@ class GameSession:
         return len(self.found_words) >= len(self.words)
 
     def time_left(self) -> int:
-        return max(0, ROUND_DURATION - int(time.time() - self.started_at))
+        return max(0, self.duration - int(time.time() - self.started_at))
 
     def summary(self) -> list:
         return sorted(
@@ -66,11 +93,17 @@ class GameSession:
             key=lambda x: -x["score"]
         )
 
+    def get_hint(self, word: str) -> str:
+        if len(word) <= 2:
+            return word
+        middle = " _ " * (len(word) - 2)
+        return f"{word[0]}{middle}{word[-1]}"
+
 
 class SessionManager:
     def __init__(self):
-        self._sess   : Dict[int, GameSession] = {}
-        self._cools  : Dict[int, float]       = {}
+        self._sess  : Dict[int, GameSession] = {}
+        self._cools : Dict[int, float]       = {}
 
     def get(self, cid: int) -> Optional[GameSession]:
         return self._sess.get(cid)
@@ -93,9 +126,8 @@ class SessionManager:
     def cooldown_left(self, cid: int) -> int:
         return max(0, int(self._cools.get(cid, 0) - time.time()))
 
-    def set_cooldown(self, cid: int):
-        from config import COOLDOWN_SECONDS
-        self._cools[cid] = time.time() + COOLDOWN_SECONDS
+    def set_cooldown(self, cid: int, secs: int = 15):
+        self._cools[cid] = time.time() + secs
 
 
 sessions = SessionManager()
