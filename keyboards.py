@@ -35,10 +35,11 @@ def theme_kb() -> InlineKeyboardMarkup:
 
 
 def game_action_kb() -> InlineKeyboardMarkup:
+    """Buttons shown under the grid image during an active round."""
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("🏆 Leaderboard", callback_data="cb:leaderboard"),
-            InlineKeyboardButton("⏱ Time Left",    callback_data="cb:timeleft"),
+            InlineKeyboardButton("➕ Add Me",       url=BOT_INVITE_LINK),
+            InlineKeyboardButton("📢 Updates",      url=UPDATES_CHANNEL),
         ],
         [
             InlineKeyboardButton("💡 Hint",         callback_data="cb:hint"),
@@ -48,7 +49,7 @@ def game_action_kb() -> InlineKeyboardMarkup:
 
 
 def next_round_kb(next_round: int, theme_key: str) -> InlineKeyboardMarkup:
-    """Button shown after round ends to continue to next round."""
+    """Shown after a round ends with ALL words found — Next Round button included."""
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
@@ -58,7 +59,17 @@ def next_round_kb(next_round: int, theme_key: str) -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton("🏆 Leaderboard", callback_data="cb:leaderboard"),
-            InlineKeyboardButton("🎲 New Theme",    callback_data="theme:random"),
+            InlineKeyboardButton("➕ Add Me",       url=BOT_INVITE_LINK),
+        ],
+    ])
+
+
+def round_over_no_next_kb() -> InlineKeyboardMarkup:
+    """Shown after a round ends by timeout — no Next Round button."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🏆 Leaderboard", callback_data="cb:leaderboard"),
+            InlineKeyboardButton("➕ Add Me",       url=BOT_INVITE_LINK),
         ],
     ])
 
@@ -72,7 +83,7 @@ def final_round_kb() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton("🎮 New Game",  callback_data="theme:random"),
-            InlineKeyboardButton("❓ Help",      callback_data="cb:help"),
+            InlineKeyboardButton("➕ Add Me",    url=BOT_INVITE_LINK),
         ],
     ])
 
