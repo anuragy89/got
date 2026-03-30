@@ -1,4 +1,6 @@
 import asyncio
+import collections
+import random
 import time
 import logging
 from typing import Dict, Optional
@@ -136,8 +138,6 @@ sessions = SessionManager()
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  THEME ROTATION  — avoid repeats for 6-7 games
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-import collections
-
 _theme_history: dict[int, collections.deque] = {}   # chat_id → recent themes
 _THEME_COOLOFF = 6   # how many games before a theme can repeat
 
