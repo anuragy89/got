@@ -20,7 +20,6 @@ def start_kb() -> InlineKeyboardMarkup:
 
 
 def theme_kb() -> InlineKeyboardMarkup:
-    # Each theme uses its own emoji for visual colour variety
     rows, row = [], []
     for key in THEME_LIST:
         t = THEMES[key]
@@ -40,6 +39,40 @@ def game_action_kb() -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton("🏆 Leaderboard", callback_data="cb:leaderboard"),
             InlineKeyboardButton("⏱ Time Left",    callback_data="cb:timeleft"),
+        ],
+        [
+            InlineKeyboardButton("💡 Hint",         callback_data="cb:hint"),
+            InlineKeyboardButton("🚩 End Game",      callback_data="cb:endgame"),
+        ],
+    ])
+
+
+def next_round_kb(next_round: int, theme_key: str) -> InlineKeyboardMarkup:
+    """Button shown after round ends to continue to next round."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(
+                f"▶️ Start Round {next_round}",
+                callback_data=f"nextround:{theme_key}:{next_round}"
+            ),
+        ],
+        [
+            InlineKeyboardButton("🏆 Leaderboard", callback_data="cb:leaderboard"),
+            InlineKeyboardButton("🎲 New Theme",    callback_data="theme:random"),
+        ],
+    ])
+
+
+def final_round_kb() -> InlineKeyboardMarkup:
+    """Shown after round 12 — game is fully complete."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🏆 Leaderboard",   callback_data="cb:leaderboard"),
+            InlineKeyboardButton("🌍 Global Board",   callback_data="cb:globalboard"),
+        ],
+        [
+            InlineKeyboardButton("🎮 New Game",  callback_data="theme:random"),
+            InlineKeyboardButton("❓ Help",      callback_data="cb:help"),
         ],
     ])
 
