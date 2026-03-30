@@ -131,3 +131,23 @@ class SessionManager:
 
 
 sessions = SessionManager()
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  THEME ROTATION  — avoid repeats for 6-7 games
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+import collections
+
+_theme_history: dict[int, collections.deque] = {}   # chat_id → recent themes
+_THEME_COOLOFF = 6   # how many games before a theme can repeat
+
+
+def pick_random_theme(chat_id: int, theme_list: list) -> str:
+    """Pick a random theme avoiding the last _THEME_COOLOFF picks for this chat."""
+    hist = _theme_history.setdefault(chat_id, collections.deque(maxlen=_THEME_COOLOFF))
+    available = [t for t in theme_list if t not in hist]
+    if not available:          # all themes recently used — just pick any
+        available = theme_list
+    chosen = random.choice(available)
+    hist.append(chosen)
+    return chosen
