@@ -10,10 +10,10 @@ from telegram.ext import ContextTypes
 
 import database as db
 from config import OWNER_ID, BROADCAST_DELAY
-from game import sessions, GameSession, get_level, MAX_ROUNDS
+from game import sessions, GameSession, get_level, MAX_ROUNDS, pick_random_theme
 from keyboards import (
     start_kb, theme_kb, game_action_kb, leaderboard_kb,
-    back_kb, next_round_kb, final_round_kb,
+    back_kb, next_round_kb, final_round_kb, round_over_no_next_kb,
 )
 from puzzle import build_puzzle, render_image, THEMES, THEME_LIST
 from strings import (
@@ -67,9 +67,18 @@ async def _end_round(chat_id, session, ctx, from_timer=False):
     for row in summary:
         await db.add_score(chat_id, row["user_id"], row["name"], row["score"], row["words"])
 
-    is_final = session.round_num >= MAX_ROUNDS
+    is_final    = session.round_num >= MAX_ROUNDS
+    round_complete = session.complete()   # True only if all words were found
     text = round_end(summary, missed, THEMES[session.theme]["name"], session.round_num, MAX_ROUNDS)
-    kb   = final_round_kb() if is_final else next_round_kb(session.round_num + 1, session.theme)
+
+    if is_final:
+        kb = final_round_kb()
+    elif round_complete:
+        kb = next_round_kb(session.round_num + 1, session.theme)
+    else:
+        kb = round_over_no_next_kb()   # no Next Round button when time ran out
+
+    grid_msg_id = session.grid_msg_id   # save before removing
 
     try:
         await ctx.bot.send_message(chat_id, text, parse_mode=ParseMode.HTML, reply_markup=kb)
@@ -78,6 +87,16 @@ async def _end_round(chat_id, session, ctx, from_timer=False):
 
     sessions.remove(chat_id)
     sessions.set_cooldown(chat_id, secs=10)
+
+    # Delete old grid image after 2 minutes
+    if grid_msg_id:
+        async def _delete_grid_later():
+            await asyncio.sleep(120)
+            try:
+                await ctx.bot.delete_message(chat_id, grid_msg_id)
+            except TelegramError:
+                pass
+        asyncio.create_task(_delete_grid_later())
 
 
 async def _timer_task(chat_id, session, ctx):
@@ -182,7 +201,7 @@ async def cmd_newgame(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     args = ctx.args or []
     arg  = args[0].lower() if args else "random"
-    theme_key = arg if arg in THEMES else random.choice(THEME_LIST)
+    theme_key = arg if arg in THEMES else pick_random_theme(chat.id, THEME_LIST)
     await _launch(chat.id, theme_key, round_num=1, ctx=ctx)
 
 
@@ -199,9 +218,10 @@ async def cmd_hint(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not unfound:
         await update.message.reply_text(no_hint_text(), parse_mode=ParseMode.HTML)
         return
-    word = random.choice(unfound)
-    hint = session.get_hint(word)
-    await update.message.reply_text(hint_text(hint, len(word)), parse_mode=ParseMode.HTML)
+    # Send ALL remaining hints in one message
+    hint_lines = [hint_text(session.get_hint(w), len(w)) for w in unfound]
+    combined = "\n\n".join(hint_lines)
+    await update.message.reply_text(combined, parse_mode=ParseMode.HTML)
 
 
 async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -387,10 +407,11 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if not unfound:
             await q.answer("All words found already!", show_alert=True)
             return
-        word = random.choice(unfound)
-        hint = session.get_hint(word)
+        # Send ALL remaining hints in one message
+        hint_lines = [hint_text(session.get_hint(w), len(w)) for w in unfound]
+        combined = "\n\n".join(hint_lines)
         try:
-            await ctx.bot.send_message(chat.id, hint_text(hint, len(word)), parse_mode=ParseMode.HTML)
+            await ctx.bot.send_message(chat.id, combined, parse_mode=ParseMode.HTML)
         except TelegramError:
             pass
 
@@ -432,7 +453,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await q.answer(f"Cooldown — {sessions.cooldown_left(chat.id)}s left.", show_alert=True)
             return
         if theme_key not in THEMES:
-            theme_key = random.choice(THEME_LIST)
+            theme_key = pick_random_theme(chat.id, THEME_LIST)
         await db.upsert_group(chat)
         await q.answer(f"▶️ Starting Round {next_round}!")
         try:
@@ -444,7 +465,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("theme:"):
         key = data.split(":")[1]
         if key == "random":
-            key = random.choice(THEME_LIST)
+            key = pick_random_theme(chat.id, THEME_LIST)
         if chat.type == ChatType.PRIVATE:
             await q.answer("Add me to a group to play!", show_alert=True)
             return
