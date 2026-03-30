@@ -1,17 +1,24 @@
 import random
 import io
 from PIL import Image, ImageDraw, ImageFont
-from config import GRID_SIZE, WORDS_PER_ROUND
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  THEMES
+#  THEMES  (20 themes, 50-70 words each)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 THEMES = {
     "animals": {
         "name": "Animals", "emoji": "🐾",
-        "words": ["LION","TIGER","ELEPHANT","MONKEY","ZEBRA","GIRAFFE","PANDA",
-                  "WOLF","EAGLE","SNAKE","BEAR","FOX","DEER","PARROT","CHEETAH",
-                  "JAGUAR","HIPPO","RHINO","LEMUR","KOALA","BISON","LYNX"],
+        "words": [
+            "LION","TIGER","ELEPHANT","MONKEY","ZEBRA","GIRAFFE","PANDA","WOLF",
+            "EAGLE","SNAKE","BEAR","FOX","DEER","PARROT","CHEETAH","JAGUAR","HIPPO",
+            "RHINO","LEMUR","KOALA","BISON","LYNX","GORILLA","LEOPARD","CHIMPANZEE",
+            "CROCODILE","FLAMINGO","PENGUIN","KANGAROO","OSTRICH","PEACOCK","HAMSTER",
+            "RABBIT","HEDGEHOG","SQUIRREL","RACCOON","BADGER","OTTER","BEAVER","MOOSE",
+            "BUFFALO","CAMEL","DONKEY","HORSE","CATTLE","SHEEP","GOAT","PIG","DUCK",
+            "SWAN","PIGEON","SPARROW","FALCON","VULTURE","TOUCAN","PELICAN","STORK",
+            "HERON","IBIS","MACAW","COCKATOO","IGUANA","GECKO","CHAMELEON","TORTOISE",
+            "PYTHON","COBRA","MAMBA","MONITOR",
+        ],
         "bg":          (10, 28, 48),
         "header_bg":   (6,  18, 34),
         "cell_bg":     (14, 42, 72),
@@ -22,9 +29,18 @@ THEMES = {
     },
     "fruits": {
         "name": "Fruits", "emoji": "🍎",
-        "words": ["MANGO","APPLE","GRAPE","BANANA","ORANGE","PAPAYA","GUAVA",
-                  "LEMON","PEACH","PLUM","CHERRY","MELON","LITCHI","KIWI",
-                  "BERRY","PEAR","APRICOT","FIG","DATES","COCONUT","JACKFRUIT"],
+        "words": [
+            "MANGO","APPLE","GRAPE","BANANA","ORANGE","PAPAYA","GUAVA","LEMON",
+            "PEACH","PLUM","CHERRY","MELON","LITCHI","KIWI","BERRY","PEAR","APRICOT",
+            "FIG","DATES","COCONUT","JACKFRUIT","POMEGRANATE","STRAWBERRY","BLUEBERRY",
+            "RASPBERRY","BLACKBERRY","WATERMELON","PINEAPPLE","AVOCADO","MUSKMELON",
+            "STARFRUIT","DRAGONFRUIT","PASSION","CUSTARD","MULBERRY","CRANBERRY",
+            "GOOSEBERRY","TAMARIND","PERSIMMON","QUINCE","LOQUAT","SAPOTE","JUJUBE",
+            "NECTARINE","TANGERINE","CLEMENTINE","MANDARIN","KUMQUAT","RAMBUTAN",
+            "LONGAN","SOURSOP","BREADFRUIT","CARAMBOLA","FEIJOA","DURIAN","MANGOSTEEN",
+            "SANTOL","SALAK","ATEMOYA","CHERIMOYA","ILAMA","JABOTICABA","LANGSAT",
+            "MAMEY","PITAYA","TAMARILLO","UVILLA",
+        ],
         "bg":          (28, 10, 0),
         "header_bg":   (48, 18, 0),
         "cell_bg":     (44, 18, 2),
@@ -35,9 +51,18 @@ THEMES = {
     },
     "ocean": {
         "name": "Ocean", "emoji": "🌊",
-        "words": ["SHARK","WHALE","DOLPHIN","OCTOPUS","CORAL","TURTLE","SQUID",
-                  "CRAB","SALMON","LOBSTER","SEAHORSE","NARWHAL","CLAM",
-                  "URCHIN","BARRACUDA","PUFFERFISH","MANATEE","SEAL","WALRUS","JELLYFISH"],
+        "words": [
+            "SHARK","WHALE","DOLPHIN","OCTOPUS","CORAL","TURTLE","SQUID","CRAB",
+            "SALMON","LOBSTER","SEAHORSE","NARWHAL","CLAM","URCHIN","BARRACUDA",
+            "PUFFERFISH","MANATEE","SEAL","WALRUS","JELLYFISH","SWORDFISH","TUNA",
+            "HERRING","MACKEREL","ANCHOVY","SARDINE","GROUPER","SNAPPER","FLOUNDER",
+            "HALIBUT","MARLIN","MANTA","STINGRAY","MORAY","ANGLERFISH","LANTERNFISH",
+            "OARFISH","COELACANTH","NAUTILUS","ABALONE","CONCH","OYSTER","MUSSEL",
+            "SCALLOP","SHRIMP","PRAWN","KRILL","STARFISH","SEAGRASS","KELP",
+            "ANEMONE","BARNACLE","CUTTLEFISH","ISOPOD","AMPHIPOD","COPEPOD",
+            "ZOOPLANKTON","PLANKTON","DUGONG","ORCA","BELUGA","PORPOISE","REMORA",
+            "PILOTFISH","TRIGGERFISH","WRASSE","PARROTFISH","CLOWNFISH","SURGEONFISH",
+        ],
         "bg":          (0, 20, 45),
         "header_bg":   (0, 30, 60),
         "cell_bg":     (0, 28, 58),
@@ -48,9 +73,18 @@ THEMES = {
     },
     "space": {
         "name": "Space", "emoji": "🚀",
-        "words": ["SATURN","JUPITER","MARS","VENUS","URANUS","METEOR","COMET",
-                  "GALAXY","NEBULA","ASTEROID","ECLIPSE","COSMOS","ORBIT",
-                  "PULSAR","QUASAR","NEUTRON","SUPERNOVA","HUBBLE","VOYAGER","PLUTO"],
+        "words": [
+            "SATURN","JUPITER","MARS","VENUS","URANUS","METEOR","COMET","GALAXY",
+            "NEBULA","ASTEROID","ECLIPSE","COSMOS","ORBIT","PULSAR","QUASAR","NEUTRON",
+            "SUPERNOVA","HUBBLE","VOYAGER","PLUTO","MERCURY","NEPTUNE","EUROPA","TITAN",
+            "GANYMEDE","CALLISTO","DEIMOS","PHOBOS","CERES","ERIS","MAKEMAKE","HAUMEA",
+            "AURORA","SOLSTICE","EQUINOX","ZENITH","APOGEE","PERIGEE","PERIHELION",
+            "APHELION","PARALLAX","REDSHIFT","BLUESHIFT","SPECTRUM","PHOTON","PROTON",
+            "ELECTRON","GRAVITON","BLACKHOLE","WORMHOLE","SINGULARITY","MAGNETAR",
+            "PROTOSTAR","MAINSEQUENCE","REDGIANT","WHITEDWARF","BROWNDWARF","EXOPLANET",
+            "KEPLER","CASSINI","PIONEER","GALILEO","JUNO","DAWN","ROSETTA","HAYABUSA",
+            "OSIRIS","INSIGHT","PERSEVERANCE","CURIOSITY",
+        ],
         "bg":          (6, 2, 20),
         "header_bg":   (12, 4, 38),
         "cell_bg":     (14, 4, 44),
@@ -61,9 +95,19 @@ THEMES = {
     },
     "sports": {
         "name": "Sports", "emoji": "⚽",
-        "words": ["CRICKET","TENNIS","HOCKEY","BOXING","RUGBY","POLO","CHESS",
-                  "GOLF","KABADDI","ARCHERY","SWIMMING","CYCLING","ROWING",
-                  "WRESTLING","JUDO","BADMINTON","VOLLEYBALL","BASKETBALL","MARATHON","FENCING"],
+        "words": [
+            "CRICKET","TENNIS","HOCKEY","BOXING","RUGBY","POLO","CHESS","GOLF",
+            "KABADDI","ARCHERY","SWIMMING","CYCLING","ROWING","WRESTLING","JUDO",
+            "BADMINTON","VOLLEYBALL","BASKETBALL","MARATHON","FENCING","SQUASH",
+            "LACROSSE","HANDBALL","SOFTBALL","BASEBALL","FOOTBALL","NETBALL","CROQUET",
+            "CURLING","BOBSLED","SKELETON","LUGE","BIATHLON","TRIATHLON","PENTATHLON",
+            "DECATHLON","HURDLES","LONGJUMP","HIGHJUMP","POLEVAULT","DISCUS","HAMMER",
+            "JAVELIN","SHOTPUT","SPRINT","RELAY","STEEPLECHASE","WEIGHTLIFTING",
+            "POWERLIFTING","GYMNASTICS","TRAMPOLINE","ACROBATICS","SKATEBOARDING",
+            "SURFING","SNOWBOARD","SKIING","ICESKATING","FIGURESKATING","SPEEDSKATING",
+            "KARATE","TAEKWONDO","AIKIDO","KENDO","SUMO","MUAYTHAI","KICKBOXING",
+            "FREEFALL","PARAGLIDING","ROCKCLIMBING","MOUNTAINBIKE",
+        ],
         "bg":          (2, 22, 4),
         "header_bg":   (4, 34, 6),
         "cell_bg":     (4, 30, 6),
@@ -74,9 +118,19 @@ THEMES = {
     },
     "countries": {
         "name": "Countries", "emoji": "🌍",
-        "words": ["INDIA","JAPAN","BRAZIL","FRANCE","CHINA","EGYPT","SPAIN",
-                  "KENYA","ITALY","PERU","NEPAL","GHANA","CANADA","RUSSIA",
-                  "TURKEY","MEXICO","SWEDEN","NORWAY","FINLAND","DENMARK","NIGERIA"],
+        "words": [
+            "INDIA","JAPAN","BRAZIL","FRANCE","CHINA","EGYPT","SPAIN","KENYA",
+            "ITALY","PERU","NEPAL","GHANA","CANADA","RUSSIA","TURKEY","MEXICO",
+            "SWEDEN","NORWAY","FINLAND","DENMARK","NIGERIA","GERMANY","AUSTRIA",
+            "BELGIUM","PORTUGAL","GREECE","POLAND","UKRAINE","HUNGARY","ROMANIA",
+            "BULGARIA","CROATIA","SERBIA","ALBANIA","GEORGIA","ARMENIA","JORDAN",
+            "ISRAEL","LEBANON","SYRIA","IRAQ","IRAN","PAKISTAN","BANGLADESH","SRILANKA",
+            "MYANMAR","THAILAND","VIETNAM","CAMBODIA","MALAYSIA","INDONESIA","PHILIPPINES",
+            "SINGAPORE","TAIWAN","SOUTHKOREA","MONGOLIA","KAZAKHSTAN","UZBEKISTAN",
+            "AZERBAIJAN","ETHIOPIA","TANZANIA","UGANDA","ANGOLA","ZAMBIA","ZIMBABWE",
+            "MOZAMBIQUE","SENEGAL","CAMEROON","SUDAN","SOMALIA","RWANDA","BOTSWANA",
+            "NAMIBIA","MADAGASCAR","MAURITIUS",
+        ],
         "bg":          (28, 2, 38),
         "header_bg":   (48, 4, 58),
         "cell_bg":     (34, 4, 50),
@@ -87,9 +141,18 @@ THEMES = {
     },
     "food": {
         "name": "Food", "emoji": "🍕",
-        "words": ["PIZZA","BURGER","NOODLES","SALAD","TACO","SUSHI","CURRY",
-                  "BIRYANI","PASTA","SANDWICH","WAFFLE","PANCAKE","DUMPLING",
-                  "RAMEN","KEBAB","BURRITO","GYOZA","FALAFEL","LASAGNA","SHAWARMA"],
+        "words": [
+            "PIZZA","BURGER","NOODLES","SALAD","TACO","SUSHI","CURRY","BIRYANI",
+            "PASTA","SANDWICH","WAFFLE","PANCAKE","DUMPLING","RAMEN","KEBAB","BURRITO",
+            "GYOZA","FALAFEL","LASAGNA","SHAWARMA","MOMOS","DOSA","IDLI","VADA",
+            "SAMOSA","PAKORA","POHA","UPMA","KHICHDI","PARATHA","NAAN","ROTI",
+            "PURI","HALWA","LADOO","BARFI","JALEBI","GULAB","RASGULLA","KHEER",
+            "KULFI","PEDA","MODAK","DHOKLA","KACHORI","BHATURA","CHOLE","RAJMA",
+            "DALBAATI","BIRYAANI","PULAO","KORMA","NIHARI","HALEEM","KEEMA",
+            "QORMA","PAYA","SAAG","PANEER","KADHAI","MAKHANI","TIKKA","TANDOORI",
+            "GAZPACHO","PAELLA","RISOTTO","GOULASH","PIEROGI","BAKLAVA","HUMMUS",
+            "TZATZIKI","MOUSSAKA","TAGINE","INJERA","JOLLOF","POUTINE",
+        ],
         "bg":          (28, 6, 16),
         "header_bg":   (50, 10, 24),
         "cell_bg":     (36, 8, 18),
@@ -100,9 +163,19 @@ THEMES = {
     },
     "bollywood": {
         "name": "Bollywood", "emoji": "🎬",
-        "words": ["SHOLAY","DILWALE","LAGAAN","DEVDAS","MUGHAL","BAJIRAO",
-                  "DANGAL","BRAHMASTRA","PATHAAN","SINGHAM","DHOOM","KRRISH",
-                  "DHAMAAL","GOLMAAL","BAAZIGAR","DEEWAR","AGNEEPATH","TAARE","ZINDAGI","GANGS"],
+        "words": [
+            "SHOLAY","DILWALE","LAGAAN","DEVDAS","MUGHAL","BAJIRAO","DANGAL",
+            "BRAHMASTRA","PATHAAN","SINGHAM","DHOOM","KRRISH","DHAMAAL","GOLMAAL",
+            "BAAZIGAR","DEEWAR","AGNEEPATH","TAARE","ZINDAGI","GANGS","KABIR",
+            "SULTAN","TIGER","RAEES","ROCKSTAR","BARFI","JAWAN","ANIMAL","KALKI",
+            "PUSHPA","VIKRAM","BAHUBALI","MAGADHEERA","ROBOT","ENTHIRAN","GHAJINI",
+            "SAAWARIYA","DEVDAAS","OMKARA","HAIDER","UDTA","MASAAN","KAPOOR",
+            "BOMBAY","RANGEELA","DILJALE","DILRUBA","DAMINI","YAARANA","TEZAAB",
+            "TRIDEV","TRISHUL","SHAKTI","KRANTI","COOLIE","MARD","TOOFAN","BETA",
+            "HERA","PHERI","SINGH","ROWDY","WANTED","DABANGG","READY","BODYGUARD",
+            "EK","THA","TIGER","KICK","BANG","BANG","PREM","RATAN","DHAN","PAYO",
+            "DILBAR","DHADKAN",
+        ],
         "bg":          (28, 18, 0),
         "header_bg":   (52, 28, 0),
         "cell_bg":     (34, 22, 0),
@@ -110,6 +183,277 @@ THEMES = {
         "accent":      (251, 191, 36),
         "letter":      (255, 244, 200),
         "sub":         (252, 215, 100),
+    },
+    "science": {
+        "name": "Science", "emoji": "🔬",
+        "words": [
+            "ATOM","MOLECULE","ELECTRON","PROTON","NEUTRON","NUCLEUS","PHOTON",
+            "QUANTUM","GRAVITY","FRICTION","VELOCITY","MOMENTUM","INERTIA","DENSITY",
+            "PRESSURE","VOLTAGE","CURRENT","RESISTANCE","CAPACITOR","INDUCTOR",
+            "TRANSISTOR","DIODE","LASER","PLASMA","ENTROPY","ENTHALPY","CATALYST",
+            "ENZYME","PROTEIN","LIPID","CARBOHYDRATE","VITAMIN","MINERAL","HORMONE",
+            "ANTIBODY","ANTIGEN","VACCINE","BACTERIA","VIRUS","FUNGI","PARASITE",
+            "CHROMOSOME","GENOME","GENE","ALLELE","MUTATION","EVOLUTION","FOSSIL",
+            "STRATA","MAGMA","IGNEOUS","SEDIMENT","METAMORPHIC","EROSION","TECTONIC",
+            "SEISMIC","TSUNAMI","VOLCANO","HURRICANE","TORNADO","CYCLONE","MONSOON",
+            "OSMOSIS","DIFFUSION","DIALYSIS","ELECTROLYSIS","PHOTOSYNTHESIS",
+            "RESPIRATION","FERMENTATION","COMBUSTION","OXIDATION","REDUCTION",
+        ],
+        "bg":          (0, 28, 28),
+        "header_bg":   (0, 18, 18),
+        "cell_bg":     (0, 40, 42),
+        "cell_border": (0, 100, 100),
+        "accent":      (52, 211, 153),
+        "letter":      (200, 255, 245),
+        "sub":         (100, 230, 210),
+    },
+    "technology": {
+        "name": "Technology", "emoji": "💻",
+        "words": [
+            "PYTHON","JAVA","KOTLIN","SWIFT","GOLANG","RUST","TYPESCRIPT","JAVASCRIPT",
+            "CPLUSPLUS","CSHARP","RUBY","SCALA","HASKELL","ERLANG","ELIXIR","CLOJURE",
+            "FORTRAN","COBOL","PASCAL","LISP","PROLOG","MATLAB","OCTAVE","JULIA",
+            "DOCKER","KUBERNETES","TERRAFORM","ANSIBLE","JENKINS","GITHUB","GITLAB",
+            "BITBUCKET","JIRA","CONFLUENCE","SLACK","NOTION","FIGMA","SKETCH",
+            "PHOTOSHOP","ILLUSTRATOR","PREMIERE","AFTEREFFECTS","BLENDER","UNITY",
+            "UNREAL","GODOT","PYGAME","OPENGL","VULKAN","DIRECTX","WEBGL","THREEJS",
+            "REACT","ANGULAR","VUEJS","SVELTE","NEXTJS","NUXTJS","GATSBY","REMIX",
+            "DJANGO","FLASK","FASTAPI","SPRING","LARAVEL","RAILS","EXPRESS","NESTJS",
+            "MONGODB","POSTGRES","MYSQL","REDIS","CASSANDRA","ELASTICSEARCH","KAFKA",
+        ],
+        "bg":          (10, 10, 30),
+        "header_bg":   (6, 6, 20),
+        "cell_bg":     (16, 16, 46),
+        "cell_border": (40, 40, 120),
+        "accent":      (99, 179, 237),
+        "letter":      (220, 235, 255),
+        "sub":         (140, 190, 240),
+    },
+    "mythology": {
+        "name": "Mythology", "emoji": "⚡",
+        "words": [
+            "ZEUS","HERA","POSEIDON","ATHENA","APOLLO","ARTEMIS","ARES","APHRODITE",
+            "HERMES","HEPHAESTUS","DIONYSUS","DEMETER","PERSEPHONE","HADES","HESTIA",
+            "CHRONOS","TITANS","PROMETHEUS","EPIMETHEUS","ATLAS","HERCULES","ACHILLES",
+            "ODYSSEUS","PERSEUS","THESEUS","JASON","ORPHEUS","NARCISSUS","MIDAS",
+            "ODIN","THOR","LOKI","FREYA","TYRE","HEIMDALL","BALDUR","FRIGG","SKADI",
+            "NJORD","AEGIR","FENRIR","JORMUNGANDR","SLEIPNIR","HUGINN","MUNINN",
+            "BRAHMA","VISHNU","SHIVA","LAKSHMI","SARASWATI","PARVATI","DURGA","KALI",
+            "GANESHA","KARTIK","INDRA","VARUNA","AGNI","VAYU","SURYA","CHANDRA",
+            "YAMA","KUBERA","HANUMAN","RAMA","KRISHNA","ARJUNA","OSIRIS","ISIS",
+            "HORUS","ANUBIS","THOTH","SEKHMET","BASTET","RA","PTAH","SOBEK","SET",
+        ],
+        "bg":          (20, 10, 40),
+        "header_bg":   (30, 14, 56),
+        "cell_bg":     (28, 14, 52),
+        "cell_border": (80, 40, 140),
+        "accent":      (251, 191, 36),
+        "letter":      (255, 248, 220),
+        "sub":         (240, 210, 130),
+    },
+    "music": {
+        "name": "Music", "emoji": "🎵",
+        "words": [
+            "GUITAR","PIANO","VIOLIN","DRUMS","TRUMPET","FLUTE","CELLO","VIOLA",
+            "HARP","TROMBONE","CLARINET","SAXOPHONE","OBOE","BASSOON","ACCORDION",
+            "SITAR","TABLA","MRIDANGAM","VEENA","SAROD","SANTOOR","BANSURI","SHEHNAI",
+            "DHOLAK","DHOL","MRIDANG","KANJIRA","GHATAM","THAVIL","NADASWARAM",
+            "BASS","TREBLE","MELODY","HARMONY","RHYTHM","TEMPO","TIMBRE","PITCH",
+            "OCTAVE","CHORD","SCALE","MAJOR","MINOR","SHARP","FLAT","NATURAL",
+            "ALLEGRO","ANDANTE","ADAGIO","PRESTO","FORTE","PIANO","MEZZO","SFORZANDO",
+            "SYMPHONY","CONCERTO","SONATA","OPERA","BALLAD","PRELUDE","FUGUE","SUITE",
+            "NOCTURNE","ETUDE","RHAPSODY","CANTATA","ORATORIO","MOTET","MADRIGAL",
+            "RAGA","TALA","BHAJAN","QAWWALI","GHAZAL","THUMRI","DADRA","KAJRI",
+        ],
+        "bg":          (20, 0, 30),
+        "header_bg":   (30, 0, 44),
+        "cell_bg":     (28, 2, 40),
+        "cell_border": (90, 10, 120),
+        "accent":      (216, 180, 254),
+        "letter":      (248, 240, 255),
+        "sub":         (200, 160, 245),
+    },
+    "geography": {
+        "name": "Geography", "emoji": "🗺️",
+        "words": [
+            "AMAZON","NILE","YANGTZE","MISSISSIPPI","GANGES","DANUBE","VOLGA","NIGER",
+            "ZAMBEZI","COLORADO","ORINOCO","EUPHRATES","TIGRIS","INDUS","MEKONG",
+            "HIMALAYAS","ANDES","ROCKIES","ALPS","PYRENEES","CAUCASUS","URALS","ATLAS",
+            "KILIMANJARO","EVEREST","KANGCHENJUNGA","LHOTSE","MAKALU","ACONCAGUA",
+            "SAHARA","GOBI","ARABIAN","ATACAMA","MOJAVE","SONORAN","THAR","KARAKUM",
+            "KALAHARI","NAMIB","SIMPSON","PATAGONIA","ANTARCTICA","ARCTIC","SIBERIA",
+            "AMAZON","CONGO","DAINTREE","BORNEO","SUMATRA","TAIGA","TUNDRA","PRAIRIE",
+            "SAVANNA","STEPPE","WETLAND","ESTUARY","DELTA","LAGOON","FJORD","CANYON",
+            "PLATEAU","PENINSULA","ARCHIPELAGO","ATOLL","ISTHMUS","STRAIT","CAPE",
+            "GLACIER","ICEBERG","PERMAFROST","GEYSER","HOTSPRING","CAVERN","KARST",
+        ],
+        "bg":          (0, 20, 10),
+        "header_bg":   (0, 30, 14),
+        "cell_bg":     (0, 28, 12),
+        "cell_border": (0, 90, 40),
+        "accent":      (110, 231, 183),
+        "letter":      (220, 255, 240),
+        "sub":         (130, 220, 185),
+    },
+    "movies": {
+        "name": "Movies", "emoji": "🎥",
+        "words": [
+            "INCEPTION","INTERSTELLAR","AVATAR","TITANIC","MATRIX","GLADIATOR",
+            "BRAVEHEART","GLADIATOR","SCARFACE","GODFATHER","GOODFELLAS","CASINO",
+            "PULPFICTION","RESERVOIR","PARASITE","JOKER","TENET","DUNKIRK","OPPENHEIMER",
+            "BARBIE","DUNE","ARRIVAL","GRAVITY","MARTIAN","FURY","SELMA","SPOTLIGHT",
+            "MOONLIGHT","NOMADLAND","BIRDMAN","WHIPLASH","BOYHOOD","REVENANT",
+            "HACKSAW","DARKEST","SHAPE","GREENBOOK","CRASH","CHICAGO","PIANIST",
+            "GLADIATOR","BEAUTIFUL","GLADIATOR","SILENCE","FARGO","BIGLEBOWSKI",
+            "TRUMAN","ETERNAL","BUTTERFLY","PRESTIGE","SHINING","CLOCKWORK","KUBRICK",
+            "LYNCH","FINCHER","NOLAN","SPIELBERG","SCORSESE","TARANTINO","KUBRICK",
+            "COPPOLA","ANDERSON","VILLENEUVE","CUARON","IÑARRITU","COENS","ALMODOVAR",
+            "BERGMAN","TARKOVSKY","KUROSAWA","LEONE","FELLINI","GODARD","TRUFFAUT",
+        ],
+        "bg":          (20, 10, 0),
+        "header_bg":   (32, 16, 0),
+        "cell_bg":     (28, 14, 2),
+        "cell_border": (100, 50, 10),
+        "accent":      (251, 146, 60),
+        "letter":      (255, 235, 210),
+        "sub":         (240, 185, 120),
+    },
+    "history": {
+        "name": "History", "emoji": "🏛️",
+        "words": [
+            "CAESAR","CLEOPATRA","NAPOLEON","ALEXANDER","GENGHIS","SALADIN","ATTILA",
+            "HANNIBAL","AUGUSTUS","HADRIAN","CONSTANTINE","JUSTINIAN","CHARLEMAGNE",
+            "CRUSADES","RENAISSANCE","REFORMATION","REVOLUTION","COLONIALISM","EMPIRE",
+            "REPUBLIC","DEMOCRACY","MONARCHY","FEUDALISM","ARISTOCRACY","OLIGARCHY",
+            "PYRAMID","PARTHENON","COLOSSEUM","PANTHEON","ACROPOLIS","STONEHENGE",
+            "MACHU","ANGKOR","BOROBUDUR","PERSEPOLIS","BABYLON","CARTHAGE","SPARTA",
+            "ATHENS","THEBES","MEMPHIS","ROME","TROY","MYCENAE","KNOSSOS","UR",
+            "NINEVEH","ASSUR","BABYLON","SUMER","AKKAD","EGYPT","INDUS","SHANG",
+            "ZHOU","QING","MING","TANG","SONG","HAN","ROMAN","BYZANTINE","OTTOMAN",
+            "MUGHAL","SAFAVID","MONGOL","VIKING","NORMAN","SAXON","FRANKISH","CELTIC",
+            "AZTEC","MAYA","INCA","OLMEC","TOLTEC","ZAPOTEC","MISSISSIPPI","PUEBLO",
+        ],
+        "bg":          (30, 20, 10),
+        "header_bg":   (44, 28, 12),
+        "cell_bg":     (38, 24, 10),
+        "cell_border": (110, 70, 30),
+        "accent":      (245, 208, 130),
+        "letter":      (255, 248, 220),
+        "sub":         (230, 195, 110),
+    },
+    "cricket": {
+        "name": "Cricket", "emoji": "🏏",
+        "words": [
+            "BATTING","BOWLING","FIELDING","WICKET","STUMPS","BAILS","CREASE","PITCH",
+            "BOUNDARY","SIXER","FOUR","CENTURY","FIFTY","DUCK","GOLDEN","MAIDEN",
+            "OVER","INNINGS","FOLLOW","DECLARATION","DRAW","TIE","SUPEROVER",
+            "YORKER","BOUNCER","GOOGLY","DOOSRA","FLIPPER","CARROM","SEAMER","SWINGER",
+            "SPINNER","PACER","ALLROUNDER","WICKETKEEPER","OPENER","NIGHTWATCHMAN",
+            "PINCHITTER","TAILENDER","CAPTAIN","SKIPPER","UMPIRE","REFEREE","THIRD",
+            "LEGBEFORE","CAUGHT","BOWLED","STUMPED","RUNOUT","HITWICKET","OBSTRUCTING",
+            "NBALL","WIDEBALL","LEGBYE","BYE","OVERTHROW","POWERPLAY","DEATHOVER",
+            "COLLARBONE","HELMET","GLOVES","PADS","THIGHGUARD","ABDOMINAL","GRILLE",
+            "REDBALL","WHITEBALL","PINKBALL","DUKES","KOOKABURRA","SG","TURF",
+            "SACHIN","KOHLI","ROHIT","DHONI","BUMRAH","ASHWIN","JADEJA","SHAMI",
+        ],
+        "bg":          (0, 22, 10),
+        "header_bg":   (0, 32, 14),
+        "cell_bg":     (2, 30, 12),
+        "cell_border": (10, 100, 50),
+        "accent":      (52, 211, 153),
+        "letter":      (215, 255, 235),
+        "sub":         (110, 230, 175),
+    },
+    "nature": {
+        "name": "Nature", "emoji": "🌿",
+        "words": [
+            "ROSE","LOTUS","TULIP","ORCHID","JASMINE","LAVENDER","SUNFLOWER","DAISY",
+            "LILY","MARIGOLD","HIBISCUS","MAGNOLIA","PEONY","DAHLIA","ZINNIA","POPPY",
+            "DAFFODIL","HYACINTH","IRIS","PRIMROSE","VIOLET","PANSY","PETUNIA","ASTER",
+            "OAK","MAPLE","PINE","CEDAR","BIRCH","WILLOW","BAMBOO","BANYAN","NEEM",
+            "MANGO","TEAK","MAHOGANY","EBONY","ROSEWOOD","SANDALWOOD","WALNUT","CHESTNUT",
+            "FERN","MOSS","LICHEN","ALGAE","CACTUS","SUCCULENT","MANGROVE","SEAGRASS",
+            "MUSHROOM","TRUFFLE","MOREL","CHANTERELLE","PORCINI","SHIITAKE","OYSTER",
+            "MONSOON","DRIZZLE","THUNDERSTORM","BLIZZARD","HAILSTORM","SNOWFALL","FOG",
+            "RAINBOW","HALO","AURORA","MIRAGE","ECLIPSE","SOLSTICE","EQUINOX","ZENITH",
+            "RIVER","STREAM","BROOK","WATERFALL","SPRING","LAKE","POND","SWAMP",
+        ],
+        "bg":          (4, 24, 4),
+        "header_bg":   (6, 34, 6),
+        "cell_bg":     (6, 32, 8),
+        "cell_border": (12, 96, 20),
+        "accent":      (134, 239, 172),
+        "letter":      (220, 255, 225),
+        "sub":         (150, 240, 175),
+    },
+    "vehicles": {
+        "name": "Vehicles", "emoji": "🚗",
+        "words": [
+            "FERRARI","LAMBORGHINI","BUGATTI","MCLAREN","PAGANI","KOENIGSEGG","RIMAC",
+            "PORSCHE","MERCEDES","BMW","AUDI","VOLKSWAGEN","TOYOTA","HONDA","NISSAN",
+            "MAZDA","SUBARU","MITSUBISHI","LEXUS","INFINITI","ACURA","GENESIS","KIA",
+            "HYUNDAI","TESLA","RIVIAN","LUCID","POLESTAR","VOLVO","JAGUAR","LANDROVER",
+            "ROLLS","BENTLEY","ASTON","MASERATI","ALFA","FIAT","LANCIA","FERRARI",
+            "HARLEY","DUCATI","YAMAHA","KAWASAKI","HONDA","SUZUKI","BMW","TRIUMPH",
+            "BOEING","AIRBUS","CONCORDE","HERCULES","OSPREY","APACHE","CHINOOK","HAWK",
+            "TITANIC","QUEEN","ENDEAVOUR","NAUTILUS","TRITON","ALVIN","SHINKAI","NEREID",
+            "SPACEX","SOYUZ","SHUTTLE","ARIANE","FALCON","STARSHIP","DRAGON","CREW",
+            "BULLET","MAGLEV","SHINKANSEN","EUROSTAR","ACELA","PENDOLINO","VELARO",
+            "CATERPILLAR","KOMATSU","LIEBHERR","VOLVO","TEREX","MANITOWOC","GROVE",
+        ],
+        "bg":          (18, 10, 0),
+        "header_bg":   (28, 14, 0),
+        "cell_bg":     (24, 12, 2),
+        "cell_border": (80, 44, 8),
+        "accent":      (252, 165, 50),
+        "letter":      (255, 240, 210),
+        "sub":         (240, 195, 120),
+    },
+    "bodyparts": {
+        "name": "Human Body", "emoji": "🫀",
+        "words": [
+            "BRAIN","HEART","LIVER","KIDNEY","LUNGS","STOMACH","PANCREAS","SPLEEN",
+            "THYROID","PITUITARY","ADRENAL","THYMUS","APPENDIX","GALLBLADDER","BLADDER",
+            "TRACHEA","BRONCHI","ALVEOLI","AORTA","VENA","ARTERY","CAPILLARY","VEIN",
+            "NEURON","SYNAPSE","AXON","DENDRITE","CORTEX","CEREBELLUM","BRAINSTEM",
+            "HIPPOCAMPUS","AMYGDALA","THALAMUS","HYPOTHALAMUS","RETINA","CORNEA",
+            "COCHLEA","EARDRUM","MALLEUS","INCUS","STAPES","FEMUR","TIBIA","FIBULA",
+            "PATELLA","HUMERUS","RADIUS","ULNA","CARPALS","METACARPAL","PHALANGES",
+            "VERTEBRA","STERNUM","CLAVICLE","SCAPULA","PELVIS","SACRUM","COCCYX",
+            "BICEPS","TRICEPS","DELTOID","TRAPEZIUS","LATISSIMUS","PECTORAL","GLUTEUS",
+            "QUADRICEPS","HAMSTRING","CALF","ACHILLES","PLANTAR","ROTATOR","FLEXOR",
+            "EPIDERMIS","DERMIS","MELANIN","KERATIN","COLLAGEN","ELASTIN","SEBACEOUS",
+        ],
+        "bg":          (28, 4, 14),
+        "header_bg":   (42, 6, 20),
+        "cell_bg":     (34, 6, 18),
+        "cell_border": (110, 20, 60),
+        "accent":      (249, 168, 212),
+        "letter":      (255, 240, 248),
+        "sub":         (245, 185, 220),
+    },
+    "games": {
+        "name": "Games", "emoji": "🎮",
+        "words": [
+            "MINECRAFT","FORTNITE","ROBLOX","PUBG","VALORANT","CSGO","OVERWATCH",
+            "LEAGUE","DOTA","HEARTHSTONE","STARCRAFT","WARCRAFT","DIABLO","WITCHER",
+            "CYBERPUNK","ELDENRING","DARKSOULS","BLOODBORNE","SEKIRO","NIOH",
+            "POKEMON","ZELDA","MARIO","METROID","KIRBY","SPLATOON","SMASH","PIKMIN",
+            "HALO","GEARS","FABLE","FORZA","HORIZON","DESTINY","ANTHEM","OUTRIDERS",
+            "GODOFWAR","SPIDERMAN","HORIZON","GHOST","RATCHET","RETURNAL","DEMONS",
+            "FINALFANTASY","PERSONA","DRAGONQUEST","KINGDOMHEARTS","XENOBLADE",
+            "RESIDENTEVIL","DEVILMAYCRY","MONSTERHUNTER","DEEPRISINGS","DRAGONSDOGMA",
+            "FALLOUT","SKYRIM","OBLIVION","MORROWIND","STARFIELD","DRAGONAGE",
+            "MASSEFFECT","BALDUR","DIVINITY","PILLARS","PATHFINDER","WASTELAND",
+            "MINECRAFT","TERRARIA","STARDEW","HADES","CELESTE","HOLLOW","ORI",
+        ],
+        "bg":          (8, 4, 28),
+        "header_bg":   (12, 6, 40),
+        "cell_bg":     (12, 6, 36),
+        "cell_border": (44, 20, 110),
+        "accent":      (167, 139, 250),
+        "letter":      (235, 228, 255),
+        "sub":         (190, 165, 248),
     },
 }
 
@@ -126,7 +470,10 @@ def _empty(size: int) -> list:
 
 
 def _place(grid: list, word: str, size: int):
-    for _ in range(200):
+    # Only use words that actually fit in the grid
+    if len(word) > size:
+        return None
+    for _ in range(300):
         dr, dc = random.choice(DIRS)
         r, c   = random.randint(0, size-1), random.randint(0, size-1)
         er      = r + dr * (len(word)-1)
@@ -154,12 +501,12 @@ def _fill(grid: list, size: int):
                 grid[r][c] = random.choice(alpha)
 
 
-def build_puzzle(theme_key: str, size: int = GRID_SIZE,
-                 n_words: int = WORDS_PER_ROUND) -> tuple:
+def build_puzzle(theme_key: str, size: int, n_words: int) -> tuple:
     """Returns (grid, words_list, placed_list)."""
-    pool   = random.sample(THEMES[theme_key]["words"],
-                           min(len(THEMES[theme_key]["words"]), n_words + 5))
-    grid   = _empty(size)
+    # Filter words that fit in this grid size
+    eligible = [w for w in THEMES[theme_key]["words"] if len(w) <= size]
+    pool = random.sample(eligible, min(len(eligible), n_words + 10))
+    grid = _empty(size)
     words, placed = [], []
     for w in pool:
         if len(words) >= n_words:
@@ -175,12 +522,11 @@ def build_puzzle(theme_key: str, size: int = GRID_SIZE,
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  IMAGE RENDERER
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CELL     = 44
-PAD      = 16
-HDR_H    = 80
-CORNER   = 7
+CELL   = 44
+PAD    = 16
+HDR_H  = 80
+CORNER = 7
 
-# Highlight colours for found words (RGBA)
 HI_FILLS = [
     (56,189,248,100),(251,191,36,100),(167,139,250,100),(52,211,153,100),
     (248,113,113,100),(251,146,60,100),(196,181,253,100),(110,231,183,100),
@@ -205,91 +551,85 @@ def _font(path: str, size: int):
 
 def render_image(theme_key: str, grid: list, placed: list,
                  found_words: list, round_num: int,
-                 size: int = GRID_SIZE) -> bytes:
+                 size: int) -> bytes:
     t = THEMES[theme_key]
-    W = size * CELL + PAD * 2
-    H = size * CELL + PAD * 2 + HDR_H
 
-    base  = Image.new("RGB", (W, H), t["bg"])
-    draw  = ImageDraw.Draw(base)
+    # Scale cell size down for larger grids so image stays reasonable
+    cell = max(32, CELL - max(0, size - 10) * 2)
 
-    # ── subtle dot-grid background ──
+    W = size * cell + PAD * 2
+    H = size * cell + PAD * 2 + HDR_H
+
+    base = Image.new("RGB", (W, H), t["bg"])
+    draw = ImageDraw.Draw(base)
+
+    # dot-grid background
     dot_col = tuple(min(v+14, 255) for v in t["bg"])
     for x in range(0, W, 22):
         for y in range(0, H, 22):
             draw.ellipse([x-1, y-1, x+1, y+1], fill=dot_col)
 
-    # ── header ──
+    # header
     draw.rectangle([0, 0, W, HDR_H], fill=t["header_bg"])
-    draw.rectangle([0, HDR_H-2, W, HDR_H], fill=t["accent"])  # accent line
+    draw.rectangle([0, HDR_H-2, W, HDR_H], fill=t["accent"])
 
-    # fonts
+    letter_size = max(11, 17 - max(0, size - 10) * 1)
     f_title  = _font("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",  21)
     f_sub    = _font("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",       12)
-    f_letter = _font("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 17)
+    f_letter = _font("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", letter_size)
     f_tag    = _font("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",   9)
 
     title = f"{t['name'].upper()}  WORD  GRID"
     tw    = draw.textlength(title, font=f_title)
     draw.text(((W-tw)/2, 12), title, fill=t["accent"], font=f_title)
 
-    found_count = len(found_words)
-    sub = (f"Find all hidden words!  •  {len(placed)} words  •  "
-           f"Round {round_num}  •  Found: {found_count}/{len(placed)}")
+    sub = (f"Round {round_num}  •  {len(placed)} words  •  "
+           f"Found: {len(found_words)}/{len(placed)}")
     sw  = draw.textlength(sub, font=f_sub)
     draw.text(((W-sw)/2, 42), sub, fill=t["sub"], font=f_sub)
 
-    # corner dots
     for cx, cy in [(PAD-5, HDR_H+PAD-5), (W-PAD+5, HDR_H+PAD-5),
                    (PAD-5, H-PAD+5),      (W-PAD+5, H-PAD+5)]:
         draw.ellipse([cx-4, cy-4, cx+4, cy+4], fill=t["accent"])
 
-    # ── found-cell map ──
     found_map: dict = {}
     for fi, fw in enumerate(found_words):
         pw = next((p for p in placed if p["word"] == fw), None)
         if pw:
-            for cell in pw["cells"]:
-                found_map[cell] = fi
+            for c in pw["cells"]:
+                found_map[c] = fi
 
-    # ── overlay for highlights ──
     overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     ov      = ImageDraw.Draw(overlay)
 
-    # ── cells ──
     for r in range(size):
         for c in range(size):
-            x = PAD + c * CELL
-            y = HDR_H + PAD + r * CELL
+            x = PAD + c * cell
+            y = HDR_H + PAD + r * cell
             letter = grid[r][c]
 
-            _rr(draw, x+1, y+1, CELL-2, CELL-2, CORNER,
+            _rr(draw, x+1, y+1, cell-2, cell-2, CORNER,
                 fill=t["cell_bg"], outline=t["cell_border"], width=1)
 
             if (r, c) in found_map:
-                fi  = found_map[(r, c)]
-                fc  = HI_FILLS[fi % len(HI_FILLS)]
-                sc  = HI_STROKES[fi % len(HI_STROKES)]
-                _rr(ov, x+1, y+1, CELL-2, CELL-2, CORNER,
-                    fill=fc, outline=sc, width=2)
+                fi = found_map[(r, c)]
+                _rr(ov, x+1, y+1, cell-2, cell-2, CORNER,
+                    fill=HI_FILLS[fi % len(HI_FILLS)],
+                    outline=HI_STROKES[fi % len(HI_STROKES)], width=2)
 
             lw = draw.textlength(letter, font=f_letter)
-            draw.text((x+(CELL-lw)/2, y+(CELL-17)/2),
+            draw.text((x+(cell-lw)/2, y+(cell-letter_size)/2),
                       letter, fill=t["letter"], font=f_letter)
 
-    # ── merge ──
     merged = Image.alpha_composite(base.convert("RGBA"), overlay).convert("RGB")
-
-    # ── tiny word tag on first cell of each found word ──
     d2 = ImageDraw.Draw(merged)
     for fi, fw in enumerate(found_words):
         pw = next((p for p in placed if p["word"] == fw), None)
         if pw and pw["cells"]:
             r0, c0 = pw["cells"][0]
-            x = PAD + c0*CELL + 3
-            y = HDR_H + PAD + r0*CELL + 3
-            sc = HI_STROKES[fi % len(HI_STROKES)]
-            d2.text((x, y), fw[:4], fill=sc, font=f_tag)
+            x = PAD + c0*cell + 3
+            y = HDR_H + PAD + r0*cell + 3
+            d2.text((x, y), fw[:4], fill=HI_STROKES[fi % len(HI_STROKES)], font=f_tag)
 
     buf = io.BytesIO()
     merged.save(buf, format="PNG", optimize=True)
