@@ -16,7 +16,7 @@ from game import (
     touch_activity, idle_seconds,
 )
 from keyboards import (
-    start_kb, theme_kb, game_action_kb, leaderboard_kb,
+    start_kb, theme_kb, game_action_kb, leaderboard_kb, globalboard_kb,
     back_kb, next_round_kb, final_round_kb, round_over_no_next_kb,
     word_found_kb,
 )
@@ -328,8 +328,13 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         session.img_bytes = new_img
 
-        # Send word-found message with Go to Grid button
-        kb = word_found_kb(session.grid_msg_id) if session.grid_msg_id else None
+        # FIX #2 — pass chat info so word_found_kb builds a real URL button
+        # that Telegram clients follow directly to the grid message.
+        kb = word_found_kb(
+            session.grid_msg_id,
+            chat_username=getattr(chat, "username", None),
+            chat_id_int=chat.id,
+        ) if session.grid_msg_id else None
         reply = await msg.reply_text(
             word_found(name, word, pts, combo, left),
             parse_mode=ParseMode.HTML,
@@ -528,7 +533,15 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     elif data == "cb:globalboard":
         rows = await db.global_leaderboard()
-        await _safe_edit_text(q, leaderboard_text(rows, "🌍 Global Leaderboard"), reply_markup=leaderboard_kb())
+        # FIX #1 — read _pending_next for this chat so the ▶️ Next Round button
+        # is preserved when the user navigates to the Global Board from a
+        # completed-round card (previously it was silently dropped here).
+        pending = _pending_next.get(chat.id)
+        nr, tk  = pending if pending else (0, "")
+        await _safe_edit_text(
+            q, leaderboard_text(rows, "🌍 Global Leaderboard"),
+            reply_markup=globalboard_kb(next_round=nr, theme_key=tk),
+        )
 
     elif data == "cb:timeleft":
         session = sessions.get(chat.id)
@@ -567,25 +580,22 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             pass
 
     elif data.startswith("cb:gotogrid:"):
-        # "Go to Grid" button on word-found messages
+        # Legacy fallback — new "Go to Grid" buttons are URL buttons and never
+        # fire a callback.  This branch only runs for old messages that were
+        # sent before the fix was deployed.
         try:
             grid_msg_id = int(data.split(":")[2])
-            await q.answer()
-            # Send an inline link to that message
-            try:
-                chat_obj = await ctx.bot.get_chat(chat.id)
-                username = getattr(chat_obj, "username", None)
-                if username:
-                    link = f"https://t.me/{username}/{grid_msg_id}"
-                else:
-                    # private group: use c/ format
-                    cid_str = str(chat.id).replace("-100", "")
-                    link = f"https://t.me/c/{cid_str}/{grid_msg_id}"
-                await q.answer(f"🔠 Tap to jump to grid: {link}", show_alert=True)
-            except TelegramError:
-                await q.answer("Scroll up to see the grid!", show_alert=True)
-        except (ValueError, IndexError):
-            await q.answer("Scroll up to see the grid!", show_alert=True)
+            chat_obj    = await ctx.bot.get_chat(chat.id)
+            username    = getattr(chat_obj, "username", None)
+            if username:
+                link = f"https://t.me/{username}/{grid_msg_id}"
+            else:
+                raw     = str(chat.id)
+                numeric = raw[4:] if raw.startswith("-100") else raw.lstrip("-")
+                link    = f"https://t.me/c/{numeric}/{grid_msg_id}"
+            await q.answer(f"Tap to jump → {link}", show_alert=True)
+        except Exception:
+            await q.answer("Scroll up to find the grid!", show_alert=True)
 
     elif data == "cb:endgame":
         if user.id != OWNER_ID:
