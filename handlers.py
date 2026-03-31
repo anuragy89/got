@@ -18,6 +18,7 @@ from game import (
 from keyboards import (
     start_kb, theme_kb, game_action_kb, leaderboard_kb,
     back_kb, next_round_kb, final_round_kb, round_over_no_next_kb,
+    word_found_kb,
 )
 from puzzle import build_puzzle, render_image, THEMES, THEME_LIST
 from strings import (
@@ -30,6 +31,10 @@ from strings import (
 )
 
 log = logging.getLogger(__name__)
+
+# ── Per-chat state for leaderboard next-round persistence ─────────
+# Stores (next_round, theme_key) after a completed round, cleared on new game
+_pending_next: dict[int, tuple] = {}
 
 
 # ── Helpers ───────────────────────────────────────────────────────
@@ -66,7 +71,7 @@ async def _safe_edit_text(q, text, parse_mode=ParseMode.HTML, reply_markup=None)
 
 
 async def _delete_messages_later(bot, chat_id: int, msg_ids: list, delay: int):
-    """Wait `delay` seconds then silently delete all given message IDs."""
+    """Wait delay seconds then silently delete all listed message IDs."""
     if not msg_ids or delay <= 0:
         return
     await asyncio.sleep(delay)
@@ -78,6 +83,17 @@ async def _delete_messages_later(bot, chat_id: int, msg_ids: list, delay: int):
         await asyncio.sleep(0.05)
 
 
+def _build_hint_text(session) -> str:
+    """Build the full hint message for all unfound words, filling in found ones."""
+    lines = []
+    for w in session.words:
+        if w in session.found_words:
+            lines.append(f"✅ <b>{w}</b> — found!")
+        else:
+            lines.append(hint_text(session.get_hint(w), len(w)))
+    return "\n\n".join(lines)
+
+
 # ── Core round logic ──────────────────────────────────────────────
 
 async def _end_round(chat_id, session, ctx, from_timer=False):
@@ -87,32 +103,31 @@ async def _end_round(chat_id, session, ctx, from_timer=False):
     is_final       = session.round_num >= MAX_ROUNDS
     round_complete = session.complete()
 
-    # Save scores
     for row in summary:
         await db.add_score(chat_id, row["user_id"], row["name"], row["score"], row["words"])
 
-    # Pick fresh theme for next round (different from current)
     next_theme = (
         pick_next_round_theme(chat_id, session.theme, THEME_LIST)
         if not is_final else session.theme
     )
+    next_round_num = session.round_num + 1
 
-    # Build round-over message
     text = round_end(
         summary, missed, THEMES[session.theme]["name"],
         session.round_num, MAX_ROUNDS,
         round_complete=round_complete,
     )
 
-    # Choose keyboard
     if is_final:
         kb = final_round_kb()
+        _pending_next.pop(chat_id, None)
     elif round_complete:
-        kb = next_round_kb(session.round_num + 1, next_theme)
+        kb = next_round_kb(next_round_num, next_theme)
+        _pending_next[chat_id] = (next_round_num, next_theme)
     else:
         kb = round_over_no_next_kb()
+        _pending_next.pop(chat_id, None)
 
-    # All message IDs to delete later: grid image + every bot msg during the round
     all_msg_ids = []
     if session.grid_msg_id:
         all_msg_ids.append(session.grid_msg_id)
@@ -127,7 +142,6 @@ async def _end_round(chat_id, session, ctx, from_timer=False):
     sessions.remove(chat_id)
     sessions.set_cooldown(chat_id, secs=10)
 
-    # Schedule deletion of all in-round messages
     if all_msg_ids and MSG_DELETE_AFTER > 0:
         asyncio.create_task(
             _delete_messages_later(ctx.bot, chat_id, all_msg_ids, MSG_DELETE_AFTER)
@@ -167,6 +181,7 @@ async def _launch(chat_id, theme_key, round_num, ctx):
     session = GameSession(chat_id, theme_key, grid, words, placed, round_num, img)
     sessions.put(session)
     touch_activity(chat_id)
+    _pending_next.pop(chat_id, None)
 
     caption = game_start_caption(t["name"], t["emoji"], round_num, len(words), duration, grid_size)
     try:
@@ -264,9 +279,23 @@ async def cmd_hint(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not unfound:
         await update.message.reply_text(no_hint_text(), parse_mode=ParseMode.HTML)
         return
-    # Send ALL remaining hints in one message
-    lines    = [hint_text(session.get_hint(w), len(w)) for w in unfound]
-    hint_msg = await update.message.reply_text("\n\n".join(lines), parse_mode=ParseMode.HTML)
+
+    hint_body = _build_hint_text(session)
+
+    if session.hint_msg_id:
+        # Try to update existing hint message
+        try:
+            await ctx.bot.edit_message_text(
+                chat_id=chat.id, message_id=session.hint_msg_id,
+                text=hint_body, parse_mode=ParseMode.HTML,
+            )
+            return
+        except TelegramError:
+            pass  # fall through to send new one
+
+    # Send fresh hint message
+    hint_msg = await update.message.reply_text(hint_body, parse_mode=ParseMode.HTML)
+    session.hint_msg_id = hint_msg.message_id
     session.msg_ids.append(hint_msg.message_id)
 
 
@@ -299,9 +328,16 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         session.img_bytes = new_img
 
-        reply = await msg.reply_text(word_found(name, word, pts, combo, left), parse_mode=ParseMode.HTML)
+        # Send word-found message with Go to Grid button
+        kb = word_found_kb(session.grid_msg_id) if session.grid_msg_id else None
+        reply = await msg.reply_text(
+            word_found(name, word, pts, combo, left),
+            parse_mode=ParseMode.HTML,
+            reply_markup=kb,
+        )
         session.msg_ids.append(reply.message_id)
 
+        # Update grid image
         if session.grid_msg_id:
             try:
                 t           = THEMES[session.theme]
@@ -311,9 +347,24 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 )
                 await ctx.bot.edit_message_media(
                     chat_id=chat.id, message_id=session.grid_msg_id,
-                    media=InputMediaPhoto(media=io.BytesIO(new_img), caption=new_caption, parse_mode=ParseMode.HTML),
+                    media=InputMediaPhoto(
+                        media=io.BytesIO(new_img),
+                        caption=new_caption,
+                        parse_mode=ParseMode.HTML,
+                    ),
                 )
             except (TelegramError, BadRequest):
+                pass
+
+        # Update hint message live if it exists
+        if session.hint_msg_id:
+            try:
+                updated_hints = _build_hint_text(session)
+                await ctx.bot.edit_message_text(
+                    chat_id=chat.id, message_id=session.hint_msg_id,
+                    text=updated_hints, parse_mode=ParseMode.HTML,
+                )
+            except TelegramError:
                 pass
 
         if session.complete():
@@ -331,15 +382,24 @@ async def cmd_leaderboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     if chat.type == ChatType.PRIVATE:
         rows, title = await db.global_leaderboard(), "🌍 Global Leaderboard"
+        await update.message.reply_text(
+            leaderboard_text(rows, title), parse_mode=ParseMode.HTML, reply_markup=leaderboard_kb()
+        )
     else:
         rows, title = await db.group_leaderboard(chat.id), f"🏆 {chat.title}"
-    await update.message.reply_text(leaderboard_text(rows, title), parse_mode=ParseMode.HTML, reply_markup=leaderboard_kb())
+        pending = _pending_next.get(chat.id)
+        nr, tk  = pending if pending else (0, "")
+        await update.message.reply_text(
+            leaderboard_text(rows, title), parse_mode=ParseMode.HTML,
+            reply_markup=leaderboard_kb(next_round=nr, theme_key=tk),
+        )
 
 
 async def cmd_globalboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     rows = await db.global_leaderboard()
     await update.message.reply_text(
-        leaderboard_text(rows, "🌍 Global Leaderboard"), parse_mode=ParseMode.HTML, reply_markup=leaderboard_kb()
+        leaderboard_text(rows, "🌍 Global Leaderboard"),
+        parse_mode=ParseMode.HTML, reply_markup=leaderboard_kb(),
     )
 
 
@@ -416,25 +476,21 @@ async def cmd_broadcast(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await prog.edit_text(broadcast_done(sent, failed, total), parse_mode=ParseMode.HTML)
 
 
-# ── Idle nudge job (scheduled) ────────────────────────────────────
+# ── Idle nudge job ────────────────────────────────────────────────
 
 async def idle_nudge_job(ctx: ContextTypes.DEFAULT_TYPE):
-    """
-    Runs on a schedule (every IDLE_NUDGE_CHECK seconds).
-    Sends a random engaging message to every group that hasn't
-    had a game in IDLE_NUDGE_AFTER seconds.
-    """
+    """Runs on schedule. Nudges groups idle for IDLE_NUDGE_AFTER seconds."""
     group_ids = await db.all_group_ids()
     for chat_id in group_ids:
         if sessions.active(chat_id):
-            continue   # game is running right now — skip
+            continue
         if idle_seconds(chat_id) < IDLE_NUDGE_AFTER:
-            continue   # played recently — skip
+            continue
         try:
             await ctx.bot.send_message(
                 chat_id, random.choice(IDLE_NUDGES), parse_mode=ParseMode.HTML,
             )
-            touch_activity(chat_id)   # reset timer so we don't spam every check
+            touch_activity(chat_id)
         except Forbidden:
             await db.mark_group_inactive(chat_id)
         except TelegramError:
@@ -460,9 +516,15 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elif data == "cb:leaderboard":
         if chat.type == ChatType.PRIVATE:
             rows, title = await db.global_leaderboard(), "🌍 Global Leaderboard"
+            await _safe_edit_text(q, leaderboard_text(rows, title), reply_markup=leaderboard_kb())
         else:
             rows, title = await db.group_leaderboard(chat.id), f"🏆 {chat.title}"
-        await _safe_edit_text(q, leaderboard_text(rows, title), reply_markup=leaderboard_kb())
+            pending = _pending_next.get(chat.id)
+            nr, tk  = pending if pending else (0, "")
+            await _safe_edit_text(
+                q, leaderboard_text(rows, title),
+                reply_markup=leaderboard_kb(next_round=nr, theme_key=tk),
+            )
 
     elif data == "cb:globalboard":
         rows = await db.global_leaderboard()
@@ -484,14 +546,46 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if not unfound:
             await q.answer("All words found already!", show_alert=True)
             return
-        lines = [hint_text(session.get_hint(w), len(w)) for w in unfound]
+
+        hint_body = _build_hint_text(session)
+
+        if session.hint_msg_id:
+            try:
+                await ctx.bot.edit_message_text(
+                    chat_id=chat.id, message_id=session.hint_msg_id,
+                    text=hint_body, parse_mode=ParseMode.HTML,
+                )
+                return
+            except TelegramError:
+                pass
+
         try:
-            hint_msg = await ctx.bot.send_message(
-                chat.id, "\n\n".join(lines), parse_mode=ParseMode.HTML,
-            )
+            hint_msg = await ctx.bot.send_message(chat.id, hint_body, parse_mode=ParseMode.HTML)
+            session.hint_msg_id = hint_msg.message_id
             session.msg_ids.append(hint_msg.message_id)
         except TelegramError:
             pass
+
+    elif data.startswith("cb:gotogrid:"):
+        # "Go to Grid" button on word-found messages
+        try:
+            grid_msg_id = int(data.split(":")[2])
+            await q.answer()
+            # Send an inline link to that message
+            try:
+                chat_obj = await ctx.bot.get_chat(chat.id)
+                username = getattr(chat_obj, "username", None)
+                if username:
+                    link = f"https://t.me/{username}/{grid_msg_id}"
+                else:
+                    # private group: use c/ format
+                    cid_str = str(chat.id).replace("-100", "")
+                    link = f"https://t.me/c/{cid_str}/{grid_msg_id}"
+                await q.answer(f"🔠 Tap to jump to grid: {link}", show_alert=True)
+            except TelegramError:
+                await q.answer("Scroll up to see the grid!", show_alert=True)
+        except (ValueError, IndexError):
+            await q.answer("Scroll up to see the grid!", show_alert=True)
 
     elif data == "cb:endgame":
         if user.id != OWNER_ID:
