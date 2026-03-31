@@ -27,6 +27,7 @@ from handlers import (
     cmd_endgame, cmd_resetboard,
     cmd_broadcast, cmd_stats,
     on_message, on_callback, on_my_chat_member,
+    idle_nudge_job,
 )
 
 # ── Logging ───────────────────────────────────────────────────────
@@ -107,6 +108,13 @@ async def post_init(app: Application):
     await db.connect()
     me = await app.bot.get_me()
     log.info(f"✅ Bot started as @{me.username}")
+    # Schedule idle nudge job — runs every 30 minutes
+    app.job_queue.run_repeating(
+        idle_nudge_job,
+        interval=30 * 60,
+        first=30 * 60,
+        name="idle_nudge",
+    )
 
 
 async def post_shutdown(app: Application):
