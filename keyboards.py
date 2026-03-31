@@ -38,18 +38,18 @@ def game_action_kb() -> InlineKeyboardMarkup:
     """Buttons shown under the grid image during an active round."""
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("➕ Add Me",       url=BOT_INVITE_LINK),
-            InlineKeyboardButton("📢 Updates",      url=UPDATES_CHANNEL),
+            InlineKeyboardButton("➕ Add Me",    url=BOT_INVITE_LINK),
+            InlineKeyboardButton("📢 Updates",   url=UPDATES_CHANNEL),
         ],
         [
-            InlineKeyboardButton("💡 Hint",         callback_data="cb:hint"),
-            InlineKeyboardButton("🚩 End Game",      callback_data="cb:endgame"),
+            InlineKeyboardButton("💡 Hint",      callback_data="cb:hint"),
+            InlineKeyboardButton("🚩 End Game",   callback_data="cb:endgame"),
         ],
     ])
 
 
 def next_round_kb(next_round: int, theme_key: str) -> InlineKeyboardMarkup:
-    """Shown after a round ends with ALL words found — Next Round button included."""
+    """Shown after a round where ALL words were found — Next Round button included."""
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
@@ -65,7 +65,7 @@ def next_round_kb(next_round: int, theme_key: str) -> InlineKeyboardMarkup:
 
 
 def round_over_no_next_kb() -> InlineKeyboardMarkup:
-    """Shown after a round ends by timeout — no Next Round button."""
+    """Shown after a round ended by timeout — no Next Round button."""
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("🏆 Leaderboard", callback_data="cb:leaderboard"),
@@ -75,15 +75,15 @@ def round_over_no_next_kb() -> InlineKeyboardMarkup:
 
 
 def final_round_kb() -> InlineKeyboardMarkup:
-    """Shown after round 12 — game is fully complete."""
+    """Shown after round 12 — full game complete."""
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("🏆 Leaderboard",   callback_data="cb:leaderboard"),
-            InlineKeyboardButton("🌍 Global Board",   callback_data="cb:globalboard"),
+            InlineKeyboardButton("🏆 Leaderboard",  callback_data="cb:leaderboard"),
+            InlineKeyboardButton("🌍 Global Board",  callback_data="cb:globalboard"),
         ],
         [
-            InlineKeyboardButton("🎮 New Game",  callback_data="theme:random"),
-            InlineKeyboardButton("➕ Add Me",    url=BOT_INVITE_LINK),
+            InlineKeyboardButton("🎮 New Game", callback_data="theme:random"),
+            InlineKeyboardButton("➕ Add Me",   url=BOT_INVITE_LINK),
         ],
     ])
 
