@@ -329,7 +329,7 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         session.img_bytes = new_img
 
         # FIX #2 — pass chat info so word_found_kb builds a real URL button
-        # that Telegram clients follow directly to the grid message.
+        # that Telegram scrolls straight to the grid message.
         kb = word_found_kb(
             session.grid_msg_id,
             chat_username=getattr(chat, "username", None),
@@ -533,9 +533,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     elif data == "cb:globalboard":
         rows = await db.global_leaderboard()
-        # FIX #1 — read _pending_next for this chat so the ▶️ Next Round button
-        # is preserved when the user navigates to the Global Board from a
-        # completed-round card (previously it was silently dropped here).
+        # FIX #1 — read _pending_next so the ▶️ Next Round button is preserved
+        # when the user navigates to Global Board from a completed-round card.
         pending = _pending_next.get(chat.id)
         nr, tk  = pending if pending else (0, "")
         await _safe_edit_text(
@@ -580,9 +579,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             pass
 
     elif data.startswith("cb:gotogrid:"):
-        # Legacy fallback — new "Go to Grid" buttons are URL buttons and never
-        # fire a callback.  This branch only runs for old messages that were
-        # sent before the fix was deployed.
+        # Legacy fallback — new Go-to-Grid buttons are URL buttons and never
+        # fire a callback. This only runs for old messages sent before the fix.
         try:
             grid_msg_id = int(data.split(":")[2])
             chat_obj    = await ctx.bot.get_chat(chat.id)
