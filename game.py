@@ -51,6 +51,7 @@ class GameSession:
         self.active       = True
         self.started_at   = time.time()
         self.grid_msg_id  : Optional[int]  = None
+        self.msg_ids      : list           = []   # all bot msgs sent during this round
         self._task        : Optional[asyncio.Task] = None
 
         duration, n_words, grid_size = get_level(round_num)
@@ -134,20 +135,49 @@ class SessionManager:
 
 sessions = SessionManager()
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  IDLE NUDGE TRACKER  — per group last activity
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+_last_activity: dict[int, float] = {}   # chat_id → timestamp of last game end/start
+
+
+def touch_activity(chat_id: int):
+    """Call whenever a game starts or ends in a group."""
+    _last_activity[chat_id] = time.time()
+
+
+def idle_seconds(chat_id: int) -> float:
+    """Seconds since last game activity in this group. Returns inf if never played."""
+    last = _last_activity.get(chat_id)
+    if last is None:
+        return float("inf")
+    return time.time() - last
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  THEME ROTATION  — avoid repeats for 6-7 games
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 _theme_history: dict[int, collections.deque] = {}   # chat_id → recent themes
-_THEME_COOLOFF = 6   # how many games before a theme can repeat
+_THEME_COOLOFF = 19  # all 20 themes before repeating
 
 
 def pick_random_theme(chat_id: int, theme_list: list) -> str:
     """Pick a random theme avoiding the last _THEME_COOLOFF picks for this chat."""
     hist = _theme_history.setdefault(chat_id, collections.deque(maxlen=_THEME_COOLOFF))
     available = [t for t in theme_list if t not in hist]
-    if not available:          # all themes recently used — just pick any
+    if not available:          # all themes used — reset
         available = theme_list
+    chosen = random.choice(available)
+    hist.append(chosen)
+    return chosen
+
+
+def pick_next_round_theme(chat_id: int, current_theme: str, theme_list: list) -> str:
+    """Pick a different theme for the next round — guaranteed not the same as current."""
+    hist = _theme_history.setdefault(chat_id, collections.deque(maxlen=_THEME_COOLOFF))
+    available = [t for t in theme_list if t not in hist and t != current_theme]
+    if not available:
+        available = [t for t in theme_list if t != current_theme] or theme_list
     chosen = random.choice(available)
     hist.append(chosen)
     return chosen
