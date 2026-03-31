@@ -51,7 +51,7 @@ class GameSession:
         self.active       = True
         self.started_at   = time.time()
         self.grid_msg_id  : Optional[int]  = None
-        self.msg_ids      : list           = []   # all bot msgs sent during this round
+        self.msg_ids      : list           = []   # all deletable bot msgs this round
         self._task        : Optional[asyncio.Task] = None
 
         duration, n_words, grid_size = get_level(round_num)
@@ -135,49 +135,54 @@ class SessionManager:
 
 sessions = SessionManager()
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  IDLE NUDGE TRACKER  — per group last activity
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-_last_activity: dict[int, float] = {}   # chat_id → timestamp of last game end/start
-
-
-def touch_activity(chat_id: int):
-    """Call whenever a game starts or ends in a group."""
-    _last_activity[chat_id] = time.time()
-
-
-def idle_seconds(chat_id: int) -> float:
-    """Seconds since last game activity in this group. Returns inf if never played."""
-    last = _last_activity.get(chat_id)
-    if last is None:
-        return float("inf")
-    return time.time() - last
-
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  THEME ROTATION  — avoid repeats for 6-7 games
+#  THEME ROTATION
+#  Uses all 20 themes before repeating any.
+#  Per-chat history stored in a deque of size 19.
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-_theme_history: dict[int, collections.deque] = {}   # chat_id → recent themes
-_THEME_COOLOFF = 19  # all 20 themes before repeating
+_theme_history: Dict[int, collections.deque] = {}
+_THEME_COOLOFF = 19   # keep last 19 so all 20 themes play before repeat
 
 
 def pick_random_theme(chat_id: int, theme_list: list) -> str:
-    """Pick a random theme avoiding the last _THEME_COOLOFF picks for this chat."""
+    """Pick a random theme avoiding recently used ones for this chat."""
     hist = _theme_history.setdefault(chat_id, collections.deque(maxlen=_THEME_COOLOFF))
     available = [t for t in theme_list if t not in hist]
-    if not available:          # all themes used — reset
-        available = theme_list
+    if not available:
+        available = list(theme_list)   # all used — reset
     chosen = random.choice(available)
     hist.append(chosen)
     return chosen
 
 
 def pick_next_round_theme(chat_id: int, current_theme: str, theme_list: list) -> str:
-    """Pick a different theme for the next round — guaranteed not the same as current."""
+    """Pick a theme for the next round — always different from current round."""
     hist = _theme_history.setdefault(chat_id, collections.deque(maxlen=_THEME_COOLOFF))
     available = [t for t in theme_list if t not in hist and t != current_theme]
     if not available:
-        available = [t for t in theme_list if t != current_theme] or theme_list
+        available = [t for t in theme_list if t != current_theme]
+    if not available:
+        available = list(theme_list)
     chosen = random.choice(available)
     hist.append(chosen)
     return chosen
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  IDLE NUDGE TRACKER
+#  Records last game activity per group so the
+#  nudge job knows when a group has gone quiet.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+_last_activity: Dict[int, float] = {}
+
+
+def touch_activity(chat_id: int) -> None:
+    """Call when a game starts or ends in a group."""
+    _last_activity[chat_id] = time.time()
+
+
+def idle_seconds(chat_id: int) -> float:
+    """Seconds since last game activity. Returns inf if group never played."""
+    ts = _last_activity.get(chat_id)
+    return float("inf") if ts is None else time.time() - ts
