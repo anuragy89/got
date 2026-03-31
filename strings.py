@@ -74,7 +74,7 @@ def help_text() -> str:
         f"  /newgame — Start round 1 (random theme)\n"
         f"  /newgame [theme] — e.g. /newgame space\n"
         f"  /theme — Browse & pick a theme\n"
-        f"  /hint — Reveal first + last letter of a hidden word\n"
+        f"  /hint — Reveal hints for all hidden words\n"
         f"  /endgame — End round early (admins)\n\n"
         f"{ICO_TROPHY()} <b>Leaderboard</b>\n"
         f"  /leaderboard — This group's top 10\n"
@@ -137,17 +137,15 @@ def round_end(summary, missed, theme_name, round_num, max_rounds, round_complete
     if missed:
         lines.append("")
         lines.append(f"{ICO_PUZZLE()} <b>Missed:</b> {', '.join(missed)}")
-    if not is_final:
-        lines.append("")
-        if round_complete:
-            lines.append(f"{ICO_ROCKET()} <b>Round {round_num + 1} is next!</b> Press the button below.")
-        else:
-            lines.append(f"⏰ <b>Time's up!</b> Not all words were found.")
-            lines.append(f"Type /newgame to start a fresh game!")
-    else:
-        lines.append("")
+    lines.append("")
+    if is_final:
         lines.append("🏁 <b>All 12 rounds complete! Great game!</b>")
         lines.append("Type /newgame to start fresh.")
+    elif round_complete:
+        lines.append(f"{ICO_ROCKET()} <b>Round {round_num + 1} is next!</b> Press the button below.")
+    else:
+        lines.append(f"⏰ <b>Time's up!</b> Not all words were found.")
+        lines.append(f"Type /newgame to start a new game!")
     return "\n".join(lines)
 
 def leaderboard_text(rows, title) -> str:
@@ -191,15 +189,49 @@ def broadcast_done(sent, failed, total) -> str:
     )
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  IDLE NUDGE MESSAGES
+#  Sent to groups that haven't played in a while
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 IDLE_NUDGES = [
-    f"{ICO_JOYSTICK()} <b>Getting bored in here?</b> 😴\nWake up and play a round! Type /newgame 🎮",
-    f"{ICO_FIRE()} <b>The grid is waiting...</b> 🧩\nFind hidden words, beat your friends! /newgame",
-    f"{ICO_ROCKET()} <b>Psst! Still here?</b> 👀\nLet's play Word Grid! Type /newgame to start 🚀",
-    f"{ICO_LIGHTNING()} <b>No game? No fun!</b> ⚡\nChallenge the group — /newgame to drop a fresh grid!",
-    f"{ICO_CROWN()} <b>Who's the word champion here?</b> 🏆\nOnly one way to find out... /newgame 👑",
-    f"{ICO_STAR()} <b>Quick break's over!</b> ⭐\nTime for a word hunt — /newgame and let's go! 🔥",
-    f"{ICO_PUZZLE()} <b>Words are hiding in the grid!</b> 🧩\nCan you find them all? /newgame to play!",
-    f"{ICO_DIAMOND()} <b>Silence is deadly boring.</b> 💎\nDrop a game, stir things up! /newgame 🎯",
-    f"{ICO_MEDAL()} <b>Your leaderboard rank is calling!</b> 🎖️\nDon't let others overtake you — /newgame now!",
-    f"{ICO_FIRE()} <b>This group needs some heat! 🔥</b>\nStart a word game and get things going — /newgame",
+    (
+        f"{ICO_JOYSTICK()} <b>Getting bored in here?</b> 😴\n"
+        f"Wake everyone up — type /newgame and drop a word grid! 🎮"
+    ),
+    (
+        f"{ICO_FIRE()} <b>The grid is waiting...</b> 🧩\n"
+        f"Find hidden words, beat your friends, climb the board! /newgame"
+    ),
+    (
+        f"{ICO_ROCKET()} <b>Psst! Still alive in here?</b> 👀\n"
+        f"Let's play Word Grid — type /newgame to fire one up! 🚀"
+    ),
+    (
+        f"{ICO_LIGHTNING()} <b>No game? No fun!</b> ⚡\n"
+        f"Challenge the whole group right now — /newgame to drop a fresh grid!"
+    ),
+    (
+        f"{ICO_CROWN()} <b>Who's the word champion here?</b> 🏆\n"
+        f"Only one way to find out... /newgame and let's settle it! 👑"
+    ),
+    (
+        f"{ICO_STAR()} <b>Break's over!</b> ⭐\n"
+        f"Time for a quick word hunt — /newgame and let's go! 🔥"
+    ),
+    (
+        f"{ICO_PUZZLE()} <b>Hidden words are waiting to be found!</b> 🧩\n"
+        f"Can your group find them all? /newgame to find out!"
+    ),
+    (
+        f"{ICO_DIAMOND()} <b>This group has gone quiet...</b> 💎\n"
+        f"Stir things up with a word game! /newgame 🎯"
+    ),
+    (
+        f"{ICO_MEDAL()} <b>Your leaderboard rank is slipping!</b> 🎖️\n"
+        f"Don't let others overtake you — jump back in with /newgame!"
+    ),
+    (
+        f"{ICO_FIRE()} <b>This group needs some heat!</b> 🔥\n"
+        f"Start a word grid, get everyone competing — /newgame now!"
+    ),
 ]
