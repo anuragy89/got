@@ -5,16 +5,14 @@ from puzzle import THEMES, THEME_LIST
 
 def start_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Add to Group", url=BOT_INVITE_LINK)],
         [
-            InlineKeyboardButton("➕ Add to Group", url=BOT_INVITE_LINK),
+            InlineKeyboardButton("📢 Updates", url=UPDATES_CHANNEL),
+            InlineKeyboardButton("🆘 Support", url=SUPPORT_GROUP),
         ],
         [
-            InlineKeyboardButton("📢 Updates",  url=UPDATES_CHANNEL),
-            InlineKeyboardButton("🆘 Support",  url=SUPPORT_GROUP),
-        ],
-        [
-            InlineKeyboardButton("❓ Help",          callback_data="cb:help"),
-            InlineKeyboardButton("🏆 Global Board",  callback_data="cb:globalboard"),
+            InlineKeyboardButton("❓ Help",         callback_data="cb:help"),
+            InlineKeyboardButton("🏆 Global Board", callback_data="cb:globalboard"),
         ],
     ])
 
@@ -35,37 +33,51 @@ def theme_kb() -> InlineKeyboardMarkup:
 
 
 def game_action_kb() -> InlineKeyboardMarkup:
-    """Buttons shown under the grid image during an active round."""
+    """Buttons under the grid image during an active round."""
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("➕ Add Me",    url=BOT_INVITE_LINK),
-            InlineKeyboardButton("📢 Updates",   url=UPDATES_CHANNEL),
+            InlineKeyboardButton("➕ Add Me",  url=BOT_INVITE_LINK),
+            InlineKeyboardButton("📢 Updates", url=UPDATES_CHANNEL),
         ],
         [
-            InlineKeyboardButton("💡 Hint",      callback_data="cb:hint"),
-            InlineKeyboardButton("🚩 End Game",   callback_data="cb:endgame"),
+            InlineKeyboardButton("💡 Hint",    callback_data="cb:hint"),
+            InlineKeyboardButton("🚩 End Game", callback_data="cb:endgame"),
         ],
     ])
 
 
+def word_found_kb(grid_msg_id: int) -> InlineKeyboardMarkup:
+    """Button shown below each word-found message — jumps to the grid."""
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("🔠 Go to Grid ➡️", callback_data=f"cb:gotogrid:{grid_msg_id}"),
+    ]])
+
+
 def next_round_kb(next_round: int, theme_key: str) -> InlineKeyboardMarkup:
-    """Shown after a round where ALL words were found — Next Round button included."""
+    """After a round where ALL words found — includes Next Round button."""
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
                 f"▶️ Start Round {next_round}",
-                callback_data=f"nextround:{theme_key}:{next_round}"
+                callback_data=f"nextround:{theme_key}:{next_round}",
             ),
         ],
         [
             InlineKeyboardButton("🏆 Leaderboard", callback_data="cb:leaderboard"),
             InlineKeyboardButton("➕ Add Me",       url=BOT_INVITE_LINK),
         ],
+        # Next Round shown again so leaderboard tap doesn't kill the option
+        [
+            InlineKeyboardButton(
+                f"▶️ Round {next_round} again →",
+                callback_data=f"nextround:{theme_key}:{next_round}",
+            ),
+        ],
     ])
 
 
 def round_over_no_next_kb() -> InlineKeyboardMarkup:
-    """Shown after a round ended by timeout — no Next Round button."""
+    """After timeout — no Next Round button."""
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("🏆 Leaderboard", callback_data="cb:leaderboard"),
@@ -75,7 +87,7 @@ def round_over_no_next_kb() -> InlineKeyboardMarkup:
 
 
 def final_round_kb() -> InlineKeyboardMarkup:
-    """Shown after round 12 — full game complete."""
+    """After round 12 — full game complete."""
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("🏆 Leaderboard",  callback_data="cb:leaderboard"),
@@ -88,23 +100,30 @@ def final_round_kb() -> InlineKeyboardMarkup:
     ])
 
 
-def leaderboard_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
+def leaderboard_kb(next_round: int = 0, theme_key: str = "") -> InlineKeyboardMarkup:
+    """Leaderboard view — optionally includes Next Round button if round was completed."""
+    rows = [
         [
             InlineKeyboardButton("🌍 Global Board", callback_data="cb:globalboard"),
             InlineKeyboardButton("🔄 Refresh",       callback_data="cb:leaderboard"),
         ],
         [
-            InlineKeyboardButton("🎮 New Game",  callback_data="theme:random"),
-            InlineKeyboardButton("❓ Help",      callback_data="cb:help"),
+            InlineKeyboardButton("🎮 New Game", callback_data="theme:random"),
+            InlineKeyboardButton("❓ Help",     callback_data="cb:help"),
         ],
-    ])
+    ]
+    if next_round > 0 and theme_key:
+        rows.append([
+            InlineKeyboardButton(
+                f"▶️ Start Round {next_round}",
+                callback_data=f"nextround:{theme_key}:{next_round}",
+            )
+        ])
+    return InlineKeyboardMarkup(rows)
 
 
 def back_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("🎮 Play Now",  callback_data="theme:random"),
-            InlineKeyboardButton("« Back",       callback_data="cb:start"),
-        ],
-    ])
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("🎮 Play Now", callback_data="theme:random"),
+        InlineKeyboardButton("« Back",      callback_data="cb:start"),
+    ]])
