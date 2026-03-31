@@ -9,8 +9,12 @@ from telegram.error import TelegramError, Forbidden, BadRequest
 from telegram.ext import ContextTypes
 
 import database as db
-from config import OWNER_ID, BROADCAST_DELAY
-from game import sessions, GameSession, get_level, MAX_ROUNDS, pick_random_theme
+from config import OWNER_ID, BROADCAST_DELAY, MSG_DELETE_AFTER, IDLE_NUDGE_AFTER
+from game import (
+    sessions, GameSession, get_level, MAX_ROUNDS,
+    pick_random_theme, pick_next_round_theme,
+    touch_activity, idle_seconds,
+)
 from keyboards import (
     start_kb, theme_kb, game_action_kb, leaderboard_kb,
     back_kb, next_round_kb, final_round_kb, round_over_no_next_kb,
@@ -21,12 +25,14 @@ from strings import (
     game_start_caption, word_found, round_end,
     leaderboard_text, my_stats, bot_stats,
     BROADCAST_USAGE, broadcast_done,
-    hint_text, no_hint_text,
+    hint_text, no_hint_text, IDLE_NUDGES,
     ICO_FIRE, ICO_PUZZLE, ICO_TROPHY, ICO_STAR, ICO_CROWN, ICO_ROCKET,
 )
 
 log = logging.getLogger(__name__)
 
+
+# ── Helpers ───────────────────────────────────────────────────────
 
 async def _is_admin(update, ctx):
     if update.effective_user.id == OWNER_ID:
@@ -59,44 +65,73 @@ async def _safe_edit_text(q, text, parse_mode=ParseMode.HTML, reply_markup=None)
             log.warning(f"edit_message_text failed: {e}")
 
 
+async def _delete_messages_later(bot, chat_id: int, msg_ids: list, delay: int):
+    """Wait `delay` seconds then silently delete all given message IDs."""
+    if not msg_ids or delay <= 0:
+        return
+    await asyncio.sleep(delay)
+    for mid in msg_ids:
+        try:
+            await bot.delete_message(chat_id, mid)
+        except TelegramError:
+            pass
+        await asyncio.sleep(0.05)
+
+
+# ── Core round logic ──────────────────────────────────────────────
+
 async def _end_round(chat_id, session, ctx, from_timer=False):
     session.active = False
-    summary = session.summary()
-    missed  = [w for w in session.words if w not in session.found_words]
+    summary        = session.summary()
+    missed         = [w for w in session.words if w not in session.found_words]
+    is_final       = session.round_num >= MAX_ROUNDS
+    round_complete = session.complete()
 
+    # Save scores
     for row in summary:
         await db.add_score(chat_id, row["user_id"], row["name"], row["score"], row["words"])
 
-    is_final    = session.round_num >= MAX_ROUNDS
-    round_complete = session.complete()   # True only if all words were found
-    text = round_end(summary, missed, THEMES[session.theme]["name"], session.round_num, MAX_ROUNDS)
+    # Pick fresh theme for next round (different from current)
+    next_theme = (
+        pick_next_round_theme(chat_id, session.theme, THEME_LIST)
+        if not is_final else session.theme
+    )
 
+    # Build round-over message
+    text = round_end(
+        summary, missed, THEMES[session.theme]["name"],
+        session.round_num, MAX_ROUNDS,
+        round_complete=round_complete,
+    )
+
+    # Choose keyboard
     if is_final:
         kb = final_round_kb()
     elif round_complete:
-        kb = next_round_kb(session.round_num + 1, session.theme)
+        kb = next_round_kb(session.round_num + 1, next_theme)
     else:
-        kb = round_over_no_next_kb()   # no Next Round button when time ran out
+        kb = round_over_no_next_kb()
 
-    grid_msg_id = session.grid_msg_id   # save before removing
+    # All message IDs to delete later: grid image + every bot msg during the round
+    all_msg_ids = []
+    if session.grid_msg_id:
+        all_msg_ids.append(session.grid_msg_id)
+    all_msg_ids.extend(session.msg_ids)
 
     try:
         await ctx.bot.send_message(chat_id, text, parse_mode=ParseMode.HTML, reply_markup=kb)
     except TelegramError:
         pass
 
+    touch_activity(chat_id)
     sessions.remove(chat_id)
     sessions.set_cooldown(chat_id, secs=10)
 
-    # Delete old grid image after 2 minutes
-    if grid_msg_id:
-        async def _delete_grid_later():
-            await asyncio.sleep(120)
-            try:
-                await ctx.bot.delete_message(chat_id, grid_msg_id)
-            except TelegramError:
-                pass
-        asyncio.create_task(_delete_grid_later())
+    # Schedule deletion of all in-round messages
+    if all_msg_ids and MSG_DELETE_AFTER > 0:
+        asyncio.create_task(
+            _delete_messages_later(ctx.bot, chat_id, all_msg_ids, MSG_DELETE_AFTER)
+        )
 
 
 async def _timer_task(chat_id, session, ctx):
@@ -106,11 +141,12 @@ async def _timer_task(chat_id, session, ctx):
         if not session.active:
             return
         try:
-            await ctx.bot.send_message(
+            warn_msg = await ctx.bot.send_message(
                 chat_id,
                 f"{ICO_FIRE()} <b>15 seconds left!</b> Find more words fast!",
                 parse_mode=ParseMode.HTML,
             )
+            session.msg_ids.append(warn_msg.message_id)
         except TelegramError:
             pass
         await asyncio.sleep(15)
@@ -130,6 +166,7 @@ async def _launch(chat_id, theme_key, round_num, ctx):
 
     session = GameSession(chat_id, theme_key, grid, words, placed, round_num, img)
     sessions.put(session)
+    touch_activity(chat_id)
 
     caption = game_start_caption(t["name"], t["emoji"], round_num, len(words), duration, grid_size)
     try:
@@ -147,14 +184,16 @@ async def _launch(chat_id, theme_key, round_num, ctx):
     session._task = asyncio.create_task(_timer_task(chat_id, session, ctx))
 
 
-# ── Commands ─────────────────────────────────────────────────────
+# ── Commands ──────────────────────────────────────────────────────
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat = update.effective_chat
     await db.upsert_user(user)
     if chat.type == ChatType.PRIVATE:
-        await update.message.reply_text(start_private(user.first_name), parse_mode=ParseMode.HTML, reply_markup=start_kb())
+        await update.message.reply_text(
+            start_private(user.first_name), parse_mode=ParseMode.HTML, reply_markup=start_kb()
+        )
     else:
         await db.upsert_group(chat)
         await update.message.reply_text(start_group(), parse_mode=ParseMode.HTML)
@@ -169,7 +208,10 @@ async def on_my_chat_member(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if status in ("member", "administrator"):
         await db.upsert_group(chat)
         try:
-            await ctx.bot.send_message(chat.id, new_group_welcome(chat.title or "the group"), parse_mode=ParseMode.HTML, reply_markup=game_action_kb())
+            await ctx.bot.send_message(
+                chat.id, new_group_welcome(chat.title or "the group"),
+                parse_mode=ParseMode.HTML, reply_markup=game_action_kb(),
+            )
         except TelegramError as e:
             log.warning(f"Welcome failed {chat.id}: {e}")
     elif status in ("left", "kicked"):
@@ -181,14 +223,18 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_theme(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"{ICO_PUZZLE()} <b>Choose a theme:</b>", parse_mode=ParseMode.HTML, reply_markup=theme_kb())
+    await update.message.reply_text(
+        f"{ICO_PUZZLE()} <b>Choose a theme:</b>", parse_mode=ParseMode.HTML, reply_markup=theme_kb()
+    )
 
 
 async def cmd_newgame(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     user = update.effective_user
     if chat.type == ChatType.PRIVATE:
-        await update.message.reply_text(f"{ICO_PUZZLE()} Add me to a group to play!", parse_mode=ParseMode.HTML, reply_markup=start_kb())
+        await update.message.reply_text(
+            f"{ICO_PUZZLE()} Add me to a group to play!", parse_mode=ParseMode.HTML, reply_markup=start_kb()
+        )
         return
     await db.upsert_user(user)
     await db.upsert_group(chat)
@@ -199,8 +245,8 @@ async def cmd_newgame(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         left = sessions.cooldown_left(chat.id)
         await update.message.reply_text(f"⏳ Cooldown — next game in <b>{left}s</b>.", parse_mode=ParseMode.HTML)
         return
-    args = ctx.args or []
-    arg  = args[0].lower() if args else "random"
+    args      = ctx.args or []
+    arg       = args[0].lower() if args else "random"
     theme_key = arg if arg in THEMES else pick_random_theme(chat.id, THEME_LIST)
     await _launch(chat.id, theme_key, round_num=1, ctx=ctx)
 
@@ -219,9 +265,9 @@ async def cmd_hint(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(no_hint_text(), parse_mode=ParseMode.HTML)
         return
     # Send ALL remaining hints in one message
-    hint_lines = [hint_text(session.get_hint(w), len(w)) for w in unfound]
-    combined = "\n\n".join(hint_lines)
-    await update.message.reply_text(combined, parse_mode=ParseMode.HTML)
+    lines    = [hint_text(session.get_hint(w), len(w)) for w in unfound]
+    hint_msg = await update.message.reply_text("\n\n".join(lines), parse_mode=ParseMode.HTML)
+    session.msg_ids.append(hint_msg.message_id)
 
 
 async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -246,19 +292,23 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         combo = session.p_combos.get(user.id, 1)
         await db.upsert_user(user)
 
-        loop = asyncio.get_event_loop()
+        loop    = asyncio.get_event_loop()
         new_img = await loop.run_in_executor(
             None, render_image, session.theme, session.grid, session.placed,
-            session.found_words, session.round_num, session.grid_size
+            session.found_words, session.round_num, session.grid_size,
         )
         session.img_bytes = new_img
 
-        await msg.reply_text(word_found(name, word, pts, combo, left), parse_mode=ParseMode.HTML)
+        reply = await msg.reply_text(word_found(name, word, pts, combo, left), parse_mode=ParseMode.HTML)
+        session.msg_ids.append(reply.message_id)
 
         if session.grid_msg_id:
             try:
-                t = THEMES[session.theme]
-                new_caption = game_start_caption(t["name"], t["emoji"], session.round_num, len(session.words), session.duration, session.grid_size)
+                t           = THEMES[session.theme]
+                new_caption = game_start_caption(
+                    t["name"], t["emoji"], session.round_num,
+                    len(session.words), session.duration, session.grid_size,
+                )
                 await ctx.bot.edit_message_media(
                     chat_id=chat.id, message_id=session.grid_msg_id,
                     media=InputMediaPhoto(media=io.BytesIO(new_img), caption=new_caption, parse_mode=ParseMode.HTML),
@@ -273,23 +323,24 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     elif session.already_found(word):
         session.reset_combo(user.id)
-        await msg.reply_text(f"❌ <code>{word}</code> was already found!", parse_mode=ParseMode.HTML)
+        reply = await msg.reply_text(f"❌ <code>{word}</code> was already found!", parse_mode=ParseMode.HTML)
+        session.msg_ids.append(reply.message_id)
 
 
 async def cmd_leaderboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     if chat.type == ChatType.PRIVATE:
-        rows  = await db.global_leaderboard()
-        title = "🌍 Global Leaderboard"
+        rows, title = await db.global_leaderboard(), "🌍 Global Leaderboard"
     else:
-        rows  = await db.group_leaderboard(chat.id)
-        title = f"🏆 {chat.title}"
+        rows, title = await db.group_leaderboard(chat.id), f"🏆 {chat.title}"
     await update.message.reply_text(leaderboard_text(rows, title), parse_mode=ParseMode.HTML, reply_markup=leaderboard_kb())
 
 
 async def cmd_globalboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     rows = await db.global_leaderboard()
-    await update.message.reply_text(leaderboard_text(rows, "🌍 Global Leaderboard"), parse_mode=ParseMode.HTML, reply_markup=leaderboard_kb())
+    await update.message.reply_text(
+        leaderboard_text(rows, "🌍 Global Leaderboard"), parse_mode=ParseMode.HTML, reply_markup=leaderboard_kb()
+    )
 
 
 async def cmd_mystats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -365,6 +416,32 @@ async def cmd_broadcast(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await prog.edit_text(broadcast_done(sent, failed, total), parse_mode=ParseMode.HTML)
 
 
+# ── Idle nudge job (scheduled) ────────────────────────────────────
+
+async def idle_nudge_job(ctx: ContextTypes.DEFAULT_TYPE):
+    """
+    Runs on a schedule (every IDLE_NUDGE_CHECK seconds).
+    Sends a random engaging message to every group that hasn't
+    had a game in IDLE_NUDGE_AFTER seconds.
+    """
+    group_ids = await db.all_group_ids()
+    for chat_id in group_ids:
+        if sessions.active(chat_id):
+            continue   # game is running right now — skip
+        if idle_seconds(chat_id) < IDLE_NUDGE_AFTER:
+            continue   # played recently — skip
+        try:
+            await ctx.bot.send_message(
+                chat_id, random.choice(IDLE_NUDGES), parse_mode=ParseMode.HTML,
+            )
+            touch_activity(chat_id)   # reset timer so we don't spam every check
+        except Forbidden:
+            await db.mark_group_inactive(chat_id)
+        except TelegramError:
+            pass
+        await asyncio.sleep(0.05)
+
+
 # ── Callbacks ─────────────────────────────────────────────────────
 
 async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -407,11 +484,12 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if not unfound:
             await q.answer("All words found already!", show_alert=True)
             return
-        # Send ALL remaining hints in one message
-        hint_lines = [hint_text(session.get_hint(w), len(w)) for w in unfound]
-        combined = "\n\n".join(hint_lines)
+        lines = [hint_text(session.get_hint(w), len(w)) for w in unfound]
         try:
-            await ctx.bot.send_message(chat.id, combined, parse_mode=ParseMode.HTML)
+            hint_msg = await ctx.bot.send_message(
+                chat.id, "\n\n".join(lines), parse_mode=ParseMode.HTML,
+            )
+            session.msg_ids.append(hint_msg.message_id)
         except TelegramError:
             pass
 
@@ -438,7 +516,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parts = data.split(":")
         if len(parts) != 3:
             return
-        theme_key  = parts[1]
+        theme_key = parts[1]
         try:
             next_round = int(parts[2])
         except ValueError:
