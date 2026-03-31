@@ -4,7 +4,7 @@ import random
 import time
 import logging
 from typing import Dict, Optional
-from config import POINTS_PER_LETTER, FIRST_FINDER_BONUS, COMBO_MULTIPLIERS
+from config import POINTS_PER_WORD, FIRST_FIND_PTS, COMBO_MULTIPLIERS
 
 log = logging.getLogger(__name__)
 
@@ -15,16 +15,16 @@ log = logging.getLogger(__name__)
 ROUND_LEVELS = {
     1:  (50,  3,  4),
     2:  (80,  4,  5),
-    3:  (110, 5,  6),
+    3:  (110,  5,  6),
     4:  (140, 6,  7),
-    5:  (180, 7,  7),
-    6:  (210, 8,  8),
-    7:  (240, 9,  8),
-    8:  (270, 10, 9),
-    9:  (300, 11, 9),
-    10: (330, 12, 10),
-    11: (360, 13, 10),
-    12: (390, 14, 11),
+    5:  (170, 7,  7),
+    6:  (200, 8,  8),
+    7:  (230, 9,  8),
+    8:  (260, 10, 9),
+    9:  (290, 11, 9),
+    10: (320, 12, 10),
+    11: (350, 13, 10),
+    12: (380, 14, 11),
 }
 MAX_ROUNDS = 12
 
@@ -52,6 +52,7 @@ class GameSession:
         self.started_at   = time.time()
         self.grid_msg_id  : Optional[int]  = None
         self.msg_ids      : list           = []   # all deletable bot msgs this round
+        self.hint_msg_id  : Optional[int]  = None  # last hint message id (for live updates)
         self._task        : Optional[asyncio.Task] = None
 
         duration, n_words, grid_size = get_level(round_num)
@@ -67,10 +68,9 @@ class GameSession:
     def register(self, word: str, uid: int, name: str) -> int:
         combo = min(self.p_combos.get(uid, 0) + 1, 5)
         self.p_combos[uid] = combo
-        mult = COMBO_MULTIPLIERS.get(combo, 1.0)
-        pts  = int(len(word) * POINTS_PER_LETTER * mult)
-        if not self.found_words:
-            pts += FIRST_FINDER_BONUS
+        # First word of the round gets 4 pts, every other word gets 3 pts (flat)
+        is_first = len(self.found_words) == 0
+        pts = FIRST_FIND_PTS if is_first else POINTS_PER_WORD
         self.found_words.append(word)
         self.finders[word] = {"user_id": uid, "name": name, "pts": pts, "combo": combo}
         self.p_scores[uid]    = self.p_scores.get(uid, 0) + pts
@@ -142,7 +142,7 @@ sessions = SessionManager()
 #  Per-chat history stored in a deque of size 19.
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 _theme_history: Dict[int, collections.deque] = {}
-_THEME_COOLOFF = 19   # keep last 19 so all 20 themes play before repeat
+_THEME_COOLOFF = 39   # keep last 39 so all 40 themes play before repeat
 
 
 def pick_random_theme(chat_id: int, theme_list: list) -> str:
