@@ -32,10 +32,6 @@ BOT_INVITE_LINK = os.getenv(
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  PREMIUM EMOJI IDs
-#  Step 1: Set USE_PREMIUM_EMOJI=true
-#  Step 2: Get IDs by sending custom emoji to
-#          @getidsbot — copy custom_emoji_id
-#  Step 3: Paste each ID below or in .env
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 USE_PREMIUM_EMOJI = os.getenv("USE_PREMIUM_EMOJI", "false").lower() == "true"
 
@@ -61,6 +57,27 @@ COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", "30"))
 POINTS_PER_LETTER  = int(os.getenv("POINTS_PER_LETTER",  "10"))
 FIRST_FINDER_BONUS = int(os.getenv("FIRST_FINDER_BONUS", "25"))
 COMBO_MULTIPLIERS  = {1: 1.0, 2: 1.5, 3: 2.0, 4: 2.5, 5: 3.0}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  MESSAGE CLEANUP
+#  Seconds after round ends before all in-round
+#  messages (grid image, word finds, hints,
+#  warnings) are auto-deleted.
+#  Default: 300 (5 minutes). Set 0 to disable.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MSG_DELETE_AFTER = int(os.getenv("MSG_DELETE_AFTER", "300"))
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  IDLE NUDGE SETTINGS
+#  IDLE_NUDGE_AFTER — seconds of no game before
+#                     bot sends an engaging msg.
+#                     Default: 10800 (3 hours)
+#  IDLE_NUDGE_CHECK — how often (seconds) bot
+#                     checks for idle groups.
+#                     Default: 1800 (30 min)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+IDLE_NUDGE_AFTER = int(os.getenv("IDLE_NUDGE_AFTER", "10800"))
+IDLE_NUDGE_CHECK = int(os.getenv("IDLE_NUDGE_CHECK", "1800"))
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  PERFORMANCE
