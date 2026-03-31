@@ -107,14 +107,16 @@ async def post_init(app: Application):
     log.info(f"✅ Bot started as @{me.username}")
 
     # Schedule idle nudge job — checks every IDLE_NUDGE_CHECK seconds
-    # First run after one full interval so bot settles before nudging
-    app.job_queue.run_repeating(
-        idle_nudge_job,
-        interval=IDLE_NUDGE_CHECK,
-        first=IDLE_NUDGE_CHECK,
-        name="idle_nudge",
-    )
-    log.info(f"⏰ Idle nudge job scheduled every {IDLE_NUDGE_CHECK}s")
+    if app.job_queue is not None:
+        app.job_queue.run_repeating(
+            idle_nudge_job,
+            interval=IDLE_NUDGE_CHECK,
+            first=IDLE_NUDGE_CHECK,
+            name="idle_nudge",
+        )
+        log.info(f"⏰ Idle nudge job scheduled every {IDLE_NUDGE_CHECK}s")
+    else:
+        log.warning("JobQueue not available — idle nudge disabled. Install: pip install 'python-telegram-bot[job-queue]'")
 
 
 async def post_shutdown(app: Application):
