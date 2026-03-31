@@ -19,7 +19,7 @@ from telegram.ext import (
 from telegram.request import HTTPXRequest
 
 import database as db
-from config import BOT_TOKEN
+from config import BOT_TOKEN, IDLE_NUDGE_CHECK
 from handlers import (
     cmd_hint,
     cmd_start, cmd_help, cmd_theme, cmd_newgame,
@@ -43,7 +43,6 @@ log = logging.getLogger("wordgrid")
 
 
 def build_app() -> Application:
-    # Separate request pool for get_updates (long-polling needs longer read timeout)
     updater_request = HTTPXRequest(
         connection_pool_size=8,
         read_timeout=35,
@@ -51,7 +50,6 @@ def build_app() -> Application:
         connect_timeout=30,
         pool_timeout=30,
     )
-    # Request pool for all other bot API calls
     bot_request = HTTPXRequest(
         connection_pool_size=16,
         read_timeout=30,
@@ -89,8 +87,7 @@ def build_app() -> Application:
 
     # ── Bot added/removed from group ──
     app.add_handler(
-        ChatMemberHandler(on_my_chat_member,
-                          ChatMemberHandler.MY_CHAT_MEMBER)
+        ChatMemberHandler(on_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER)
     )
 
     # ── Word guesses in groups ──
@@ -108,13 +105,16 @@ async def post_init(app: Application):
     await db.connect()
     me = await app.bot.get_me()
     log.info(f"✅ Bot started as @{me.username}")
-    # Schedule idle nudge job — runs every 30 minutes
+
+    # Schedule idle nudge job — checks every IDLE_NUDGE_CHECK seconds
+    # First run after one full interval so bot settles before nudging
     app.job_queue.run_repeating(
         idle_nudge_job,
-        interval=30 * 60,
-        first=30 * 60,
+        interval=IDLE_NUDGE_CHECK,
+        first=IDLE_NUDGE_CHECK,
         name="idle_nudge",
     )
+    log.info(f"⏰ Idle nudge job scheduled every {IDLE_NUDGE_CHECK}s")
 
 
 async def post_shutdown(app: Application):
@@ -136,7 +136,7 @@ def main():
         drop_pending_updates=True,
         allowed_updates=Update.ALL_TYPES,
         poll_interval=0,
-        timeout=30,         # long-poll timeout sent to Telegram
+        timeout=30,
     )
 
 
