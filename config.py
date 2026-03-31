@@ -54,9 +54,9 @@ GRID_SIZE        = int(os.getenv("GRID_SIZE",        "10"))
 WORDS_PER_ROUND  = int(os.getenv("WORDS_PER_ROUND",  "8"))
 COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", "30"))
 
-POINTS_PER_LETTER  = int(os.getenv("POINTS_PER_LETTER",  "10"))
-FIRST_FINDER_BONUS = int(os.getenv("FIRST_FINDER_BONUS", "25"))
-COMBO_MULTIPLIERS  = {1: 1.0, 2: 1.5, 3: 2.0, 4: 2.5, 5: 3.0}
+POINTS_PER_WORD     = int(os.getenv("POINTS_PER_WORD",     "3"))   # pts per word found
+FIRST_FIND_PTS      = int(os.getenv("FIRST_FIND_PTS",      "4"))   # pts for very first word in round
+COMBO_MULTIPLIERS   = {1: 1.0, 2: 1.5, 3: 2.0, 4: 2.5, 5: 3.0}
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  MESSAGE CLEANUP
