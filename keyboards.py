@@ -19,14 +19,16 @@ from puzzle import THEMES, THEME_LIST
 
 def _cb(text: str, data: str, style: str = None) -> InlineKeyboardButton:
     """Callback button, optional colour."""
-    kw = {"api_kwargs": {"style": style}} if style else {}
-    return InlineKeyboardButton(text, callback_data=data, **kw)
+    if style:
+        return InlineKeyboardButton(text, callback_data=data, style=style)
+    return InlineKeyboardButton(text, callback_data=data)
 
 
 def _url(text: str, link: str, style: str = None) -> InlineKeyboardButton:
     """URL button, optional colour."""
-    kw = {"api_kwargs": {"style": style}} if style else {}
-    return InlineKeyboardButton(text, url=link, **kw)
+    if style:
+        return InlineKeyboardButton(text, url=link, style=style)
+    return InlineKeyboardButton(text, url=link)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -125,11 +127,6 @@ def next_round_kb(next_round: int, theme_key: str) -> InlineKeyboardMarkup:
         [
             _cb("🏆 Leaderboard", "cb:leaderboard", style="primary"),
             _url("➕ Add Me",      BOT_INVITE_LINK,  style="success"),
-        ],
-        # Repeated so tapping Leaderboard never removes the Next Round option
-        [
-            _cb(f"▶️ Round {next_round} again →",
-                f"nextround:{theme_key}:{next_round}", style="success"),
         ],
     ])
 
