@@ -210,9 +210,19 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     await db.upsert_user(user)
     if chat.type == ChatType.PRIVATE:
-        await update.message.reply_text(
-            start_private(user.first_name), parse_mode=ParseMode.HTML, reply_markup=start_kb()
-        )
+        BANNER_URL = "https://ibb.co/JjJrTmBt"
+        try:
+            await update.message.reply_photo(
+                photo=BANNER_URL,
+                caption=start_private(user.first_name),
+                parse_mode=ParseMode.HTML,
+                reply_markup=start_kb(),
+            )
+        except TelegramError:
+            # Fallback: if image fails, send text-only
+            await update.message.reply_text(
+                start_private(user.first_name), parse_mode=ParseMode.HTML, reply_markup=start_kb()
+            )
     else:
         await db.upsert_group(chat)
         await update.message.reply_text(start_group(), parse_mode=ParseMode.HTML)
