@@ -13,6 +13,9 @@ from config import OWNER_ID, BROADCAST_DELAY, MSG_DELETE_AFTER, IDLE_NUDGE_AFTER
 from game import (
     sessions, GameSession, get_level, MAX_ROUNDS,
     pick_random_theme, pick_next_round_theme,
+    pick_hard_theme, pick_hard_words,
+    HARD_GRID_SIZE, HARD_N_WORDS_MIN, HARD_N_WORDS_MAX,
+    HARD_POINTS_PER_WORD, HARD_FIRST_PTS,
     touch_activity, idle_seconds,
 )
 from keyboards import (
@@ -267,11 +270,141 @@ async def cmd_newgame(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await _launch(chat.id, theme_key, round_num=1, ctx=ctx)
 
 
-async def cmd_hint(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    # Hints are now shown inline in the grid image caption — no separate command needed
-    await update.message.reply_text(
-        "💡 Hints are shown directly under the grid image!", parse_mode=ParseMode.HTML
+async def _launch_hard(chat_id: int, ctx) -> None:
+    """Start a single /newhard session — 11×11 grid, 10-15 words, high pts."""
+    from puzzle import build_puzzle as _build_puzzle, render_image as _render_image
+
+    theme_key = pick_hard_theme(chat_id, THEME_LIST)
+    t         = THEMES[theme_key]
+
+    # Pick non-repeating word subset for this hard session
+    hard_words = pick_hard_words(
+        chat_id, theme_key, t["words"],
+        HARD_N_WORDS_MIN, HARD_N_WORDS_MAX,
     )
+    n_words = len(hard_words)
+
+    loop = asyncio.get_event_loop()
+
+    # Build puzzle using only the pre-selected hard_words
+    def _build():
+        from puzzle import _place, _empty, _fill
+        import random as _rand
+        grid   = _empty(HARD_GRID_SIZE)
+        placed = []
+        chosen = []
+        for w in _rand.sample(hard_words, len(hard_words)):
+            cells = _place(grid, w, HARD_GRID_SIZE)
+            if cells:
+                chosen.append(w)
+                placed.append({"word": w, "cells": cells})
+        if not chosen:
+            raise ValueError("Hard puzzle: 0 words placed")
+        _fill(grid, HARD_GRID_SIZE)
+        return grid, chosen, placed
+
+    try:
+        grid, words, placed = await loop.run_in_executor(None, _build)
+    except ValueError as e:
+        log.error(f"_launch_hard: {e}")
+        try:
+            await ctx.bot.send_message(
+                chat_id, "⚠️ Couldn't generate hard puzzle — try /newhard again!",
+                parse_mode=ParseMode.HTML,
+            )
+        except TelegramError:
+            pass
+        return
+
+    img = await loop.run_in_executor(
+        None, _render_image, theme_key, grid, placed, [], 1, HARD_GRID_SIZE,
+    )
+
+    session = GameSession(chat_id, theme_key, grid, words, placed,
+                          round_num=1, img_bytes=img, is_hard=True)
+    sessions.put(session)
+    touch_activity(chat_id)
+    _pending_next.pop(chat_id, None)
+
+    caption = game_start_caption(
+        t["name"], t["emoji"], 1, len(words), session.duration, HARD_GRID_SIZE,
+        words=words, found_words=[],
+    )
+    # Add hard mode badge to caption
+    caption = f"🔥 <b>HARD MODE</b> — {caption[caption.index('<b>Round'):]}"
+
+    try:
+        msg = await ctx.bot.send_photo(
+            chat_id, photo=io.BytesIO(img),
+            caption=caption, parse_mode=ParseMode.HTML,
+            reply_markup=game_action_kb(),
+        )
+        session.grid_msg_id = msg.message_id
+    except TelegramError as e:
+        log.error(f"send_photo (hard) failed {chat_id}: {e}")
+        sessions.remove(chat_id)
+        return
+
+    session._task = asyncio.create_task(_timer_task(chat_id, session, ctx))
+
+
+async def cmd_newhard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Start a Hard Mode game — /newhard"""
+    chat = update.effective_chat
+    user = update.effective_user
+    if chat.type == ChatType.PRIVATE:
+        await update.message.reply_text(
+            f"{ICO_PUZZLE()} Add me to a group to play Hard Mode!",
+            parse_mode=ParseMode.HTML, reply_markup=start_kb(),
+        )
+        return
+    await db.upsert_user(user)
+    await db.upsert_group(chat)
+    if sessions.active(chat.id):
+        await update.message.reply_text(
+            f"{ICO_FIRE()} A game is already running!", parse_mode=ParseMode.HTML
+        )
+        return
+    if sessions.cooldown(chat.id):
+        left = sessions.cooldown_left(chat.id)
+        await update.message.reply_text(
+            f"⏳ Cooldown — next game in <b>{left}s</b>.", parse_mode=ParseMode.HTML
+        )
+        return
+    await _launch_hard(chat.id, ctx=ctx)
+
+
+async def cmd_hint(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    if chat.type == ChatType.PRIVATE:
+        await update.message.reply_text("Hints only work during a group game!")
+        return
+    session = sessions.get(chat.id)
+    if not session or not session.active:
+        await update.message.reply_text("No active game to hint!")
+        return
+    unfound = [w for w in session.words if w not in session.found_words]
+    if not unfound:
+        await update.message.reply_text(no_hint_text(), parse_mode=ParseMode.HTML)
+        return
+
+    hint_body = _build_hint_text(session)
+
+    if session.hint_msg_id:
+        # Try to update existing hint message
+        try:
+            await ctx.bot.edit_message_text(
+                chat_id=chat.id, message_id=session.hint_msg_id,
+                text=hint_body, parse_mode=ParseMode.HTML,
+            )
+            return
+        except TelegramError:
+            pass  # fall through to send new one
+
+    # Send fresh hint message
+    hint_msg = await update.message.reply_text(hint_body, parse_mode=ParseMode.HTML)
+    session.hint_msg_id = hint_msg.message_id
+    session.msg_ids.append(hint_msg.message_id)
 
 
 async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -317,7 +450,7 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         session.msg_ids.append(reply.message_id)
 
-        # Update grid image caption (with refreshed inline hints)
+        # Update grid image caption (inline hints refresh + hard mode badge)
         if session.grid_msg_id:
             try:
                 t           = THEMES[session.theme]
@@ -326,6 +459,8 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                     len(session.words), session.duration, session.grid_size,
                     words=session.words, found_words=session.found_words,
                 )
+                if session.is_hard:
+                    new_caption = f"🔥 <b>HARD MODE</b> — {new_caption[new_caption.index('<b>Round'):]}"
                 await ctx.bot.edit_message_media(
                     chat_id=chat.id, message_id=session.grid_msg_id,
                     media=InputMediaPhoto(
@@ -515,9 +650,33 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await q.answer("No active game.", show_alert=True)
 
     elif data == "cb:hint":
-        # Hints are now shown inline in the grid caption — this callback is kept
-        # only for backwards compatibility with old messages that still have the button.
-        await q.answer("💡 Hints are shown directly under the grid image!", show_alert=True)
+        session = sessions.get(chat.id)
+        if not session or not session.active:
+            await q.answer("No active game!", show_alert=True)
+            return
+        unfound = [w for w in session.words if w not in session.found_words]
+        if not unfound:
+            await q.answer("All words found already!", show_alert=True)
+            return
+
+        hint_body = _build_hint_text(session)
+
+        if session.hint_msg_id:
+            try:
+                await ctx.bot.edit_message_text(
+                    chat_id=chat.id, message_id=session.hint_msg_id,
+                    text=hint_body, parse_mode=ParseMode.HTML,
+                )
+                return
+            except TelegramError:
+                pass
+
+        try:
+            hint_msg = await ctx.bot.send_message(chat.id, hint_body, parse_mode=ParseMode.HTML)
+            session.hint_msg_id = hint_msg.message_id
+            session.msg_ids.append(hint_msg.message_id)
+        except TelegramError:
+            pass
 
     elif data.startswith("cb:gotogrid:"):
         # Legacy fallback — new Go-to-Grid buttons are URL buttons and never
