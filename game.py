@@ -9,6 +9,20 @@ from config import POINTS_PER_WORD, FIRST_FIND_PTS, COMBO_MULTIPLIERS
 log = logging.getLogger(__name__)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  HARD MODE CONSTANTS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+HARD_GRID_SIZE        = 11
+HARD_N_WORDS_MIN      = 10
+HARD_N_WORDS_MAX      = 15
+HARD_DURATION_MIN     = 300   # secs
+HARD_DURATION_MAX     = 360   # secs
+HARD_POINTS_PER_WORD  = 12    # pts per normal find in hard mode
+HARD_FIRST_PTS        = 15    # pts for first find in hard mode
+# Resolved at session start (randomised within range)
+HARD_DURATION  = 330          # default mid-range; overridden per session
+HARD_GRID_SIZE = 11
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  ROUND LEVEL TABLE  (12 rounds)
 #  round_num → (duration_secs, words_to_find, grid_size)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -34,7 +48,8 @@ def get_level(round_num: int) -> tuple:
 
 
 class GameSession:
-    def __init__(self, chat_id, theme, grid, words, placed, round_num, img_bytes):
+    def __init__(self, chat_id, theme, grid, words, placed, round_num, img_bytes,
+                 is_hard: bool = False):
         self.chat_id      = chat_id
         self.theme        = theme
         self.grid         = grid
@@ -42,6 +57,7 @@ class GameSession:
         self.placed       = placed
         self.round_num    = round_num
         self.img_bytes    = img_bytes
+        self.is_hard      = is_hard          # True for /newhard sessions
         self.found_words  : list           = []
         self.finders      : Dict[str,dict] = {}
         self.p_combos     : Dict[int,int]  = {}
@@ -51,13 +67,17 @@ class GameSession:
         self.active       = True
         self.started_at   = time.time()
         self.grid_msg_id  : Optional[int]  = None
-        self.msg_ids      : list           = []   # all deletable bot msgs this round
-        self.hint_msg_id  : Optional[int]  = None  # last hint message id (for live updates)
+        self.msg_ids      : list           = []
+        self.hint_msg_id  : Optional[int]  = None
         self._task        : Optional[asyncio.Task] = None
 
-        duration, n_words, grid_size = get_level(round_num)
-        self.duration  = duration
-        self.grid_size = grid_size
+        if is_hard:
+            self.duration  = random.randint(HARD_DURATION_MIN, HARD_DURATION_MAX)
+            self.grid_size = HARD_GRID_SIZE
+        else:
+            duration, n_words, grid_size = get_level(round_num)
+            self.duration  = duration
+            self.grid_size = grid_size
 
     def valid_guess(self, word: str) -> bool:
         return word in self.words and word not in self.found_words
@@ -68,9 +88,16 @@ class GameSession:
     def register(self, word: str, uid: int, name: str) -> int:
         combo = min(self.p_combos.get(uid, 0) + 1, 5)
         self.p_combos[uid] = combo
-        # First word of the round gets 4 pts, every other word gets 3 pts (flat)
         is_first = len(self.found_words) == 0
-        pts = FIRST_FIND_PTS if is_first else POINTS_PER_WORD
+        if self.is_hard:
+            # Hard mode: flat high pts, first finder gets +2 bonus
+            pts = HARD_FIRST_PTS if is_first else HARD_POINTS_PER_WORD
+        else:
+            # Normal mode: base pts scale up by 1 per round
+            bonus = self.round_num - 1          # +0 on R1, +1 on R2, +2 on R3 …
+            base_first  = FIRST_FIND_PTS + bonus
+            base_normal = POINTS_PER_WORD + bonus
+            pts = base_first if is_first else base_normal
         self.found_words.append(word)
         self.finders[word] = {"user_id": uid, "name": name, "pts": pts, "combo": combo}
         self.p_scores[uid]    = self.p_scores.get(uid, 0) + pts
@@ -98,9 +125,9 @@ class GameSession:
 
     def get_hint(self, word: str) -> str:
         if len(word) <= 2:
-            return word[0] + " _" * (len(word) - 1)
-        blanks = " _ " * (len(word) - 2)
-        return f"{word[0]}{blanks}{word[-1]}"
+            return word
+        middle = " _ " * (len(word) - 2)
+        return f"{word[0]}{middle}{word[-1]}"
 
 
 class SessionManager:
@@ -137,7 +164,48 @@ sessions = SessionManager()
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  THEME ROTATION
+#  HARD MODE ROTATION
+#  Separate per-chat history for /newhard so
+#  themes and word pools don't repeat until
+#  all are exhausted.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+_hard_theme_history : Dict[int, collections.deque] = {}
+_hard_word_history  : Dict[int, set]               = {}
+
+
+def pick_hard_theme(chat_id: int, theme_list: list) -> str:
+    """Pick a hard-mode theme, avoiding repeats until all used."""
+    hist = _hard_theme_history.setdefault(
+        chat_id, collections.deque(maxlen=len(theme_list) - 1)
+    )
+    available = [t for t in theme_list if t not in hist]
+    if not available:
+        hist.clear()
+        available = list(theme_list)
+    chosen = random.choice(available)
+    hist.append(chosen)
+    return chosen
+
+
+def pick_hard_words(chat_id: int, theme_key: str, all_words: list,
+                    n_min: int, n_max: int) -> list:
+    """
+    Pick n_min–n_max words from this theme for hard mode.
+    Words already used (across all hard sessions for this chat) are
+    avoided until the full pool is exhausted, then the used set resets.
+    Only words with 3+ letters are eligible.
+    """
+    eligible = [w for w in all_words if len(w) >= 3]
+    used = _hard_word_history.setdefault(chat_id, set())
+    available = [w for w in eligible if w not in used]
+    n = random.randint(n_min, n_max)
+    if len(available) < n:
+        # Pool exhausted — reset and use full list
+        used.clear()
+        available = list(eligible)
+    chosen = random.sample(available, min(n, len(available)))
+    used.update(chosen)
+    return chosen
 #  Uses all 20 themes before repeating any.
 #  Per-chat history stored in a deque of size 19.
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
