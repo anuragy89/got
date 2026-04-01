@@ -966,16 +966,17 @@ def build_puzzle(theme_key: str, size: int, n_words: int) -> tuple:
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  IMAGE RENDERER
+#  IMAGE RENDERER  (High Quality)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CELL   = 44
-PAD    = 16
-HDR_H  = 80
-CORNER = 7
+CELL   = 56          # base cell size (was 44)
+PAD    = 22          # padding around grid
+HDR_H  = 100         # header height (was 80)
+CORNER = 10          # cell corner radius
+SCALE  = 2           # supersampling factor for anti-aliasing
 
 HI_FILLS = [
-    (56,189,248,100),(251,191,36,100),(167,139,250,100),(52,211,153,100),
-    (248,113,113,100),(251,146,60,100),(196,181,253,100),(110,231,183,100),
+    (56,189,248,130),(251,191,36,130),(167,139,250,130),(52,211,153,130),
+    (248,113,113,130),(251,146,60,130),(196,181,253,130),(110,231,183,130),
 ]
 HI_STROKES = [
     (56,189,248),(251,191,36),(167,139,250),(52,211,153),
@@ -995,49 +996,105 @@ def _font(path: str, size: int):
         return ImageFont.load_default()
 
 
+def _blend(color, alpha_factor, bg):
+    """Blend color onto bg with alpha_factor 0-1."""
+    return tuple(int(c * alpha_factor + b * (1 - alpha_factor))
+                 for c, b in zip(color[:3], bg))
+
+
 def render_image(theme_key: str, grid: list, placed: list,
                  found_words: list, round_num: int,
                  size: int) -> bytes:
     t = THEMES[theme_key]
 
-    # Scale cell size down for larger grids so image stays reasonable
-    cell = max(32, CELL - max(0, size - 10) * 2)
+    # Scale cell size for larger grids
+    cell = max(36, CELL - max(0, size - 8) * 2)
+    s    = SCALE  # supersampling
 
     W = size * cell + PAD * 2
     H = size * cell + PAD * 2 + HDR_H
 
-    base = Image.new("RGB", (W, H), t["bg"])
+    # ── Draw at 2× resolution then downsample ──────────────────────
+    W2, H2 = W * s, H * s
+    cell2, pad2, hdr2, corner2 = cell*s, PAD*s, HDR_H*s, CORNER*s
+
+    base = Image.new("RGB", (W2, H2), t["bg"])
     draw = ImageDraw.Draw(base)
 
-    # dot-grid background
-    dot_col = tuple(min(v+14, 255) for v in t["bg"])
-    for x in range(0, W, 22):
-        for y in range(0, H, 22):
-            draw.ellipse([x-1, y-1, x+1, y+1], fill=dot_col)
+    # ── Subtle gradient-like background with vignette dots ──────────
+    dot_col = tuple(min(v + 20, 255) for v in t["bg"])
+    dot_dim  = tuple(max(v - 5, 0) for v in t["bg"])
+    for x in range(0, W2, 28):
+        for y in range(0, H2, 28):
+            # fade dots toward corners for vignette feel
+            cx_dist = abs(x - W2//2) / (W2//2)
+            cy_dist = abs(y - H2//2) / (H2//2)
+            dist    = (cx_dist**2 + cy_dist**2) ** 0.5
+            col = dot_col if dist < 0.6 else dot_dim
+            r   = s if dist < 0.4 else 1
+            draw.ellipse([x-r, y-r, x+r, y+r], fill=col)
 
-    # header
-    draw.rectangle([0, 0, W, HDR_H], fill=t["header_bg"])
-    draw.rectangle([0, HDR_H-2, W, HDR_H], fill=t["accent"])
+    # ── Header with gradient illusion ──────────────────────────────
+    for i in range(hdr2):
+        ratio = i / hdr2
+        blended = tuple(int(t["header_bg"][j] + (t["bg"][j] - t["header_bg"][j]) * ratio * 0.3)
+                        for j in range(3))
+        draw.line([(0, i), (W2, i)], fill=blended)
 
-    letter_size = max(11, 17 - max(0, size - 10) * 1)
-    f_title  = _font("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",  21)
-    f_sub    = _font("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",       12)
-    f_letter = _font("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", letter_size)
-    f_tag    = _font("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",   9)
+    # accent bar under header (thick, glowing look)
+    bar_h = 4 * s
+    draw.rectangle([0, hdr2 - bar_h, W2, hdr2], fill=t["accent"])
+    # subtle glow above bar
+    glow_col = tuple(min(v + 60, 255) for v in t["accent"])
+    draw.rectangle([0, hdr2 - bar_h - s, W2, hdr2 - bar_h], fill=glow_col)
 
-    title = f"{t['name'].upper()}  WORD  GRID"
-    tw    = draw.textlength(title, font=f_title)
-    draw.text(((W-tw)/2, 12), title, fill=t["accent"], font=f_title)
+    # ── Fonts (scaled for supersampling) ───────────────────────────
+    letter_size  = max(14, 22 - max(0, size - 8) * 1) * s
+    title_size   = 26 * s
+    sub_size     = 15 * s
+    tag_size     = 11 * s
 
+    FONT_BOLD  = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    FONT_REG   = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    FONT_MONO  = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf"
+
+    f_title  = _font(FONT_BOLD, title_size)
+    f_sub    = _font(FONT_REG,  sub_size)
+    f_letter = _font(FONT_MONO, letter_size)
+    f_tag    = _font(FONT_BOLD, tag_size)
+
+    # ── Title with shadow ───────────────────────────────────────────
+    title    = f"{t['name'].upper()}  WORD  GRID"
+    tw       = draw.textlength(title, font=f_title)
+    tx, ty   = (W2 - tw) / 2, 14 * s
+    # shadow
+    shadow   = tuple(max(v - 40, 0) for v in t["accent"])
+    draw.text((tx + 2, ty + 2), title, fill=shadow,    font=f_title)
+    draw.text((tx,     ty),     title, fill=t["accent"], font=f_title)
+
+    # ── Subtitle ────────────────────────────────────────────────────
     sub = (f"Round {round_num}  •  {len(placed)} words  •  "
            f"Found: {len(found_words)}/{len(placed)}")
     sw  = draw.textlength(sub, font=f_sub)
-    draw.text(((W-sw)/2, 42), sub, fill=t["sub"], font=f_sub)
+    draw.text(((W2 - sw) / 2, 52 * s), sub, fill=t["sub"], font=f_sub)
 
-    for cx, cy in [(PAD-5, HDR_H+PAD-5), (W-PAD+5, HDR_H+PAD-5),
-                   (PAD-5, H-PAD+5),      (W-PAD+5, H-PAD+5)]:
-        draw.ellipse([cx-4, cy-4, cx+4, cy+4], fill=t["accent"])
+    # ── Corner accent dots ──────────────────────────────────────────
+    r_dot = 6 * s
+    for cx, cy in [(pad2 - 6*s, hdr2 + pad2 - 6*s),
+                   (W2 - pad2 + 6*s, hdr2 + pad2 - 6*s),
+                   (pad2 - 6*s, H2 - pad2 + 6*s),
+                   (W2 - pad2 + 6*s, H2 - pad2 + 6*s)]:
+        draw.ellipse([cx - r_dot, cy - r_dot, cx + r_dot, cy + r_dot], fill=t["accent"])
 
+    # ── Grid outline / shadow ───────────────────────────────────────
+    gx0 = pad2 - 4
+    gy0 = hdr2 + pad2 - 4
+    gx1 = pad2 + size * cell2 + 4
+    gy1 = hdr2 + pad2 + size * cell2 + 4
+    draw.rounded_rectangle([gx0, gy0, gx1, gy1], radius=corner2 + 4,
+                            outline=t["accent"], width=2*s)
+
+    # ── Build found-cell map ────────────────────────────────────────
     found_map: dict = {}
     for fi, fw in enumerate(found_words):
         pw = next((p for p in placed if p["word"] == fw), None)
@@ -1045,39 +1102,63 @@ def render_image(theme_key: str, grid: list, placed: list,
             for c in pw["cells"]:
                 found_map[c] = fi
 
-    overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    overlay = Image.new("RGBA", (W2, H2), (0, 0, 0, 0))
     ov      = ImageDraw.Draw(overlay)
 
+    # ── Draw cells ─────────────────────────────────────────────────
     for r in range(size):
         for c in range(size):
-            x = PAD + c * cell
-            y = HDR_H + PAD + r * cell
+            x = pad2 + c * cell2
+            y = hdr2 + pad2 + r * cell2
             letter = grid[r][c]
 
-            _rr(draw, x+1, y+1, cell-2, cell-2, CORNER,
-                fill=t["cell_bg"], outline=t["cell_border"], width=1)
+            # cell shadow (subtle depth)
+            shadow_col = tuple(max(v - 10, 0) for v in t["cell_bg"])
+            _rr(draw, x + 2, y + 2, cell2 - 2, cell2 - 2, corner2, fill=shadow_col)
 
+            # cell body
+            _rr(draw, x + 1, y + 1, cell2 - 2, cell2 - 2, corner2,
+                fill=t["cell_bg"], outline=t["cell_border"], width=2)
+
+            # subtle inner highlight on top edge
+            hi_col = tuple(min(v + 25, 255) for v in t["cell_bg"])
+            draw.line([(x + corner2, y + 2), (x + cell2 - corner2, y + 2)], fill=hi_col, width=s)
+
+            # highlight overlay for found words
             if (r, c) in found_map:
                 fi = found_map[(r, c)]
-                _rr(ov, x+1, y+1, cell-2, cell-2, CORNER,
+                _rr(ov, x + 1, y + 1, cell2 - 2, cell2 - 2, corner2,
                     fill=HI_FILLS[fi % len(HI_FILLS)],
-                    outline=HI_STROKES[fi % len(HI_STROKES)], width=2)
+                    outline=HI_STROKES[fi % len(HI_STROKES)], width=3)
 
+            # letter with shadow
             lw = draw.textlength(letter, font=f_letter)
-            draw.text((x+(cell-lw)/2, y+(cell-letter_size)/2),
-                      letter, fill=t["letter"], font=f_letter)
+            lx = x + (cell2 - lw) / 2
+            ly = y + (cell2 - letter_size) / 2
+            shadow_l = tuple(max(v - 50, 0) for v in t["letter"])
+            draw.text((lx + 1, ly + 1), letter, fill=shadow_l, font=f_letter)
+            draw.text((lx,     ly),     letter, fill=t["letter"], font=f_letter)
 
+    # ── Merge highlight overlay ─────────────────────────────────────
     merged = Image.alpha_composite(base.convert("RGBA"), overlay).convert("RGB")
     d2 = ImageDraw.Draw(merged)
+
+    # ── Word labels on found cells ─────────────────────────────────
     for fi, fw in enumerate(found_words):
         pw = next((p for p in placed if p["word"] == fw), None)
         if pw and pw["cells"]:
             r0, c0 = pw["cells"][0]
-            x = PAD + c0*cell + 3
-            y = HDR_H + PAD + r0*cell + 3
-            d2.text((x, y), fw[:4], fill=HI_STROKES[fi % len(HI_STROKES)], font=f_tag)
+            x = pad2 + c0 * cell2 + 4
+            y = hdr2 + pad2 + r0 * cell2 + 3
+            col = HI_STROKES[fi % len(HI_STROKES)]
+            # shadow
+            d2.text((x + 1, y + 1), fw[:5], fill=(0, 0, 0), font=f_tag)
+            d2.text((x,     y),     fw[:5], fill=col,        font=f_tag)
+
+    # ── Downsample to final size (anti-aliasing) ────────────────────
+    final = merged.resize((W, H), Image.LANCZOS)
 
     buf = io.BytesIO()
-    merged.save(buf, format="PNG", optimize=True)
+    final.save(buf, format="PNG", optimize=True, compress_level=6)
     buf.seek(0)
     return buf.read()
