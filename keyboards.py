@@ -212,7 +212,7 @@ def globalboard_kb(next_round: int = 0, theme_key: str = "") -> InlineKeyboardMa
     if next_round > 0 and theme_key:
         rows.append([
             _cb(f"▶️ Start Round {next_round}",
-                f"nextround:{theme_key}:{next_round}", style="success"),
+                f"nextround:{theme_key}:{next_round}", style="danger"),
         ])
     return InlineKeyboardMarkup(rows)
 
