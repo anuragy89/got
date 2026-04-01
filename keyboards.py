@@ -88,11 +88,11 @@ def game_action_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
             _url("➕ Add Me",  BOT_INVITE_LINK, style="success"),
-            _url("📢 Updates", UPDATES_CHANNEL),      # external link — no colour
+            _url("📢 Updates", UPDATES_CHANNEL),
         ],
         [
-            _cb("💡 Hint",     "cb:hint",    style="primary"),
-            _cb("🚩 End Game", "cb:endgame", style="danger"),
+            _url("🆘 Support", SUPPORT_GROUP,  style="primary"),
+            _cb("🚩 End Game", "cb:endgame",   style="danger"),
         ],
     ])
 
@@ -125,6 +125,11 @@ def next_round_kb(next_round: int, theme_key: str) -> InlineKeyboardMarkup:
         [
             _cb("🏆 Leaderboard", "cb:leaderboard", style="primary"),
             _url("➕ Add Me",      BOT_INVITE_LINK,  style="success"),
+        ],
+        # Repeated so tapping Leaderboard never removes the Next Round option
+        [
+            _cb(f"▶️ Round {next_round} again →",
+                f"nextround:{theme_key}:{next_round}", style="success"),
         ],
     ])
 
