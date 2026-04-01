@@ -32,12 +32,8 @@ def start_private(name: str) -> str:
         f"<b>│</b> {ICO_FIRE()} Build combos for up to <b>3×</b> bonus points\n"
         f"<b>│</b> {ICO_TROPHY()} Most words found = <b>WINNER</b>!\n"
         f"<b>└────────────────────</b>\n\n"
-        f"<b>┌ 20 Themes</b>\n"
-        f"<b>│</b> 🐾 Animals  🍎 Fruits  🌊 Ocean  🚀 Space  ⚽ Sports\n"
-        f"<b>│</b> 🌍 Countries  🍕 Food  🎬 Bollywood  🔬 Science  💻 Tech\n"
-        f"<b>│</b> ⚡ Mythology  🎵 Music  🗺️ Geography  🎥 Movies  🏛️ History\n"
-        f"<b>│</b> 🏏 Cricket  🌿 Nature  🚗 Vehicles  🫀 Body  🎮 Games\n"
-        f"<b>└────────────────────</b>\n\n"
+        f"<b>│20 Themes</b>\n"
+       
         f"{ICO_DIAMOND()} <b>Add me to your group and start playing now!</b>"
     )
 
