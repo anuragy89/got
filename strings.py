@@ -94,13 +94,38 @@ def help_text() -> str:
         f"  4 → ×2.5  |  5+ → ×3.0"
     )
 
-def game_start_caption(theme_name, theme_emoji, round_num, n_words, duration, grid_size) -> str:
-    return (
-        f"{ICO_PUZZLE()} <b>Round {round_num} — {theme_emoji} {theme_name}!</b>\n\n"
-        f"Find <b>{n_words} hidden words</b> in the <b>{grid_size}×{grid_size}</b> grid!\n"
-        f"Type any word you spot to claim it {ICO_FIRE()}\n\n"
+def game_start_caption(theme_name, theme_emoji, round_num, n_words, duration, grid_size,
+                       words=None, found_words=None) -> str:
+    """
+    Caption shown under the grid image.
+    When words/found_words are provided, inline hints replace the old
+    'Find X hidden words' line — each unfound word shows first+last letter,
+    each found word shows a ✅ tick.
+    """
+    header = (
+        f"{ICO_PUZZLE()} <b>Round {round_num} — {theme_emoji} {theme_name}!</b>\n"
         f"{ICO_LIGHTNING()} Timer: <b>{duration}s</b>  |  "
-        f"{ICO_STAR()} Build combos for bonus points!"
+        f"{ICO_STAR()} Build combos for bonus points!\n\n"
+    )
+
+    if words:
+        found_set = set(found_words or [])
+        hint_lines = []
+        for w in words:
+            if w in found_set:
+                hint_lines.append(f"✅ <b>{w}</b>")
+            else:
+                if len(w) <= 2:
+                    masked = w[0] + " _" * (len(w) - 1)
+                else:
+                    masked = w[0] + " _ " * (len(w) - 2) + w[-1]
+                hint_lines.append(f"💡 <code>{masked}</code>  <i>({len(w)} letters)</i>")
+        return header + "\n".join(hint_lines)
+
+    # Fallback when words not yet available (shouldn't normally happen)
+    return (
+        header +
+        f"Find <b>{n_words} hidden words</b> in the <b>{grid_size}×{grid_size}</b> grid!"
     )
 
 def word_found(name, word, pts, combo, left) -> str:
