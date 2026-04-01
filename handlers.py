@@ -19,7 +19,7 @@ from game import (
     touch_activity, idle_seconds,
 )
 from keyboards import (
-    start_kb, theme_kb, game_action_kb, leaderboard_kb, globalboard_kb,
+    start_kb, theme_kb, game_action_kb, hard_action_kb, leaderboard_kb, globalboard_kb,
     back_kb, next_round_kb, final_round_kb, round_over_no_next_kb,
     word_found_kb,
 )
@@ -271,37 +271,41 @@ async def cmd_newgame(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def _launch_hard(chat_id: int, ctx) -> None:
-    """Start a single /newhard session — 11×11 grid, 10-15 words, high pts."""
-    from puzzle import build_puzzle as _build_puzzle, render_image as _render_image
+    """Start a single /newhard session — 11x11 grid, 10-15 words, high pts."""
+    from puzzle import render_image as _render_image, _place, _empty, _fill
 
     theme_key = pick_hard_theme(chat_id, THEME_LIST)
     t         = THEMES[theme_key]
 
-    # Pick non-repeating word subset for this hard session
+    # Pick non-repeating word subset (3+ letters, 10-15 words)
     hard_words = pick_hard_words(
         chat_id, theme_key, t["words"],
         HARD_N_WORDS_MIN, HARD_N_WORDS_MAX,
     )
-    n_words = len(hard_words)
 
     loop = asyncio.get_event_loop()
 
-    # Build puzzle using only the pre-selected hard_words
     def _build():
-        from puzzle import _place, _empty, _fill
         import random as _rand
-        grid   = _empty(HARD_GRID_SIZE)
-        placed = []
-        chosen = []
-        for w in _rand.sample(hard_words, len(hard_words)):
-            cells = _place(grid, w, HARD_GRID_SIZE)
-            if cells:
-                chosen.append(w)
-                placed.append({"word": w, "cells": cells})
-        if not chosen:
-            raise ValueError("Hard puzzle: 0 words placed")
-        _fill(grid, HARD_GRID_SIZE)
-        return grid, chosen, placed
+        # Try up to 5 times to place at least HARD_N_WORDS_MIN words
+        best_grid, best_chosen, best_placed = None, [], []
+        for attempt in range(5):
+            grid   = _empty(HARD_GRID_SIZE)
+            placed = []
+            chosen = []
+            for w in _rand.sample(hard_words, len(hard_words)):
+                cells = _place(grid, w, HARD_GRID_SIZE)
+                if cells:
+                    chosen.append(w)
+                    placed.append({"word": w, "cells": cells})
+            if len(chosen) > len(best_chosen):
+                best_grid, best_chosen, best_placed = grid, chosen, placed
+            if len(chosen) >= HARD_N_WORDS_MIN:
+                break
+        if not best_chosen:
+            raise ValueError("Hard puzzle: couldn't place any words")
+        _fill(best_grid, HARD_GRID_SIZE)
+        return best_grid, best_chosen, best_placed
 
     try:
         grid, words, placed = await loop.run_in_executor(None, _build)
@@ -309,7 +313,7 @@ async def _launch_hard(chat_id: int, ctx) -> None:
         log.error(f"_launch_hard: {e}")
         try:
             await ctx.bot.send_message(
-                chat_id, "⚠️ Couldn't generate hard puzzle — try /newhard again!",
+                chat_id, "Could not generate hard puzzle. Try /newhard again!",
                 parse_mode=ParseMode.HTML,
             )
         except TelegramError:
@@ -330,14 +334,13 @@ async def _launch_hard(chat_id: int, ctx) -> None:
         t["name"], t["emoji"], 1, len(words), session.duration, HARD_GRID_SIZE,
         words=words, found_words=[],
     )
-    # Add hard mode badge to caption
-    caption = f"🔥 <b>HARD MODE</b> — {caption[caption.index('<b>Round'):]}"
+    caption = "🔥 <b>HARD MODE</b> — " + caption[caption.index("<b>Round"):]
 
     try:
         msg = await ctx.bot.send_photo(
             chat_id, photo=io.BytesIO(img),
             caption=caption, parse_mode=ParseMode.HTML,
-            reply_markup=game_action_kb(),
+            reply_markup=hard_action_kb(),
         )
         session.grid_msg_id = msg.message_id
     except TelegramError as e:
