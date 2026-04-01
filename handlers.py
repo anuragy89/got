@@ -175,15 +175,7 @@ async def _launch(chat_id, theme_key, round_num, ctx):
     t = THEMES[theme_key]
 
     loop = asyncio.get_event_loop()
-    try:
-        grid, words, placed = await loop.run_in_executor(None, build_puzzle, theme_key, grid_size, n_words)
-    except ValueError as e:
-        log.error(f"_launch: {e}")
-        try:
-            await ctx.bot.send_message(chat_id, "⚠️ Couldn't generate puzzle — try /newgame again!", parse_mode=ParseMode.HTML)
-        except TelegramError:
-            pass
-        return
+    grid, words, placed = await loop.run_in_executor(None, build_puzzle, theme_key, grid_size, n_words)
     img = await loop.run_in_executor(None, render_image, theme_key, grid, placed, [], round_num, grid_size)
 
     session = GameSession(chat_id, theme_key, grid, words, placed, round_num, img)
@@ -191,7 +183,8 @@ async def _launch(chat_id, theme_key, round_num, ctx):
     touch_activity(chat_id)
     _pending_next.pop(chat_id, None)
 
-    caption = game_start_caption(t["name"], t["emoji"], round_num, len(words), duration, grid_size)
+    caption = game_start_caption(t["name"], t["emoji"], round_num, len(words), duration, grid_size,
+                                 words=words, found_words=[])
     try:
         msg = await ctx.bot.send_photo(
             chat_id, photo=io.BytesIO(img),
@@ -275,36 +268,10 @@ async def cmd_newgame(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_hint(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    chat = update.effective_chat
-    if chat.type == ChatType.PRIVATE:
-        await update.message.reply_text("Hints only work during a group game!")
-        return
-    session = sessions.get(chat.id)
-    if not session or not session.active:
-        await update.message.reply_text("No active game to hint!")
-        return
-    unfound = [w for w in session.words if w not in session.found_words]
-    if not unfound:
-        await update.message.reply_text(no_hint_text(), parse_mode=ParseMode.HTML)
-        return
-
-    hint_body = _build_hint_text(session)
-
-    if session.hint_msg_id:
-        # Try to update existing hint message
-        try:
-            await ctx.bot.edit_message_text(
-                chat_id=chat.id, message_id=session.hint_msg_id,
-                text=hint_body, parse_mode=ParseMode.HTML,
-            )
-            return
-        except TelegramError:
-            pass  # fall through to send new one
-
-    # Send fresh hint message
-    hint_msg = await update.message.reply_text(hint_body, parse_mode=ParseMode.HTML)
-    session.hint_msg_id = hint_msg.message_id
-    session.msg_ids.append(hint_msg.message_id)
+    # Hints are now shown inline in the grid image caption — no separate command needed
+    await update.message.reply_text(
+        "💡 Hints are shown directly under the grid image!", parse_mode=ParseMode.HTML
+    )
 
 
 async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -350,13 +317,14 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         session.msg_ids.append(reply.message_id)
 
-        # Update grid image
+        # Update grid image caption (with refreshed inline hints)
         if session.grid_msg_id:
             try:
                 t           = THEMES[session.theme]
                 new_caption = game_start_caption(
                     t["name"], t["emoji"], session.round_num,
                     len(session.words), session.duration, session.grid_size,
+                    words=session.words, found_words=session.found_words,
                 )
                 await ctx.bot.edit_message_media(
                     chat_id=chat.id, message_id=session.grid_msg_id,
@@ -367,17 +335,6 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                     ),
                 )
             except (TelegramError, BadRequest):
-                pass
-
-        # Update hint message live if it exists
-        if session.hint_msg_id:
-            try:
-                updated_hints = _build_hint_text(session)
-                await ctx.bot.edit_message_text(
-                    chat_id=chat.id, message_id=session.hint_msg_id,
-                    text=updated_hints, parse_mode=ParseMode.HTML,
-                )
-            except TelegramError:
                 pass
 
         if session.complete():
@@ -558,33 +515,9 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await q.answer("No active game.", show_alert=True)
 
     elif data == "cb:hint":
-        session = sessions.get(chat.id)
-        if not session or not session.active:
-            await q.answer("No active game!", show_alert=True)
-            return
-        unfound = [w for w in session.words if w not in session.found_words]
-        if not unfound:
-            await q.answer("All words found already!", show_alert=True)
-            return
-
-        hint_body = _build_hint_text(session)
-
-        if session.hint_msg_id:
-            try:
-                await ctx.bot.edit_message_text(
-                    chat_id=chat.id, message_id=session.hint_msg_id,
-                    text=hint_body, parse_mode=ParseMode.HTML,
-                )
-                return
-            except TelegramError:
-                pass
-
-        try:
-            hint_msg = await ctx.bot.send_message(chat.id, hint_body, parse_mode=ParseMode.HTML)
-            session.hint_msg_id = hint_msg.message_id
-            session.msg_ids.append(hint_msg.message_id)
-        except TelegramError:
-            pass
+        # Hints are now shown inline in the grid caption — this callback is kept
+        # only for backwards compatibility with old messages that still have the button.
+        await q.answer("💡 Hints are shown directly under the grid image!", show_alert=True)
 
     elif data.startswith("cb:gotogrid:"):
         # Legacy fallback — new Go-to-Grid buttons are URL buttons and never
