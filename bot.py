@@ -22,7 +22,7 @@ import database as db
 from config import BOT_TOKEN, IDLE_NUDGE_CHECK
 from handlers import (
     cmd_hint,
-    cmd_start, cmd_help, cmd_theme, cmd_newgame,
+    cmd_start, cmd_help, cmd_theme, cmd_newgame, cmd_newhard,
     cmd_leaderboard, cmd_globalboard, cmd_mystats,
     cmd_endgame, cmd_resetboard,
     cmd_broadcast, cmd_stats,
@@ -72,6 +72,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("help",        cmd_help))
     app.add_handler(CommandHandler("theme",       cmd_theme))
     app.add_handler(CommandHandler("newgame",     cmd_newgame))
+    app.add_handler(CommandHandler("newhard",     cmd_newhard))
     app.add_handler(CommandHandler("leaderboard", cmd_leaderboard))
     app.add_handler(CommandHandler("globalboard", cmd_globalboard))
     app.add_handler(CommandHandler("mystats",     cmd_mystats))
