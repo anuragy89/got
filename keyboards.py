@@ -97,6 +97,20 @@ def game_action_kb() -> InlineKeyboardMarkup:
     ])
 
 
+def hard_action_kb() -> InlineKeyboardMarkup:
+    """Buttons under the grid image during a HARD MODE round — Support replaces Hint."""
+    return InlineKeyboardMarkup([
+        [
+            _url("➕ Add Me",   BOT_INVITE_LINK, style="success"),
+            _url("📢 Updates",  UPDATES_CHANNEL),
+        ],
+        [
+            _url("🆘 Support",  SUPPORT_GROUP,   style="primary"),
+            _cb("🚩 End Game",  "cb:endgame",    style="danger"),
+        ],
+    ])
+
+
 def word_found_kb(grid_msg_id: int,
                   chat_username: "str | None" = None,
                   chat_id_int:   "int | None" = None) -> InlineKeyboardMarkup:
