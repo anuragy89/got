@@ -19,16 +19,14 @@ from puzzle import THEMES, THEME_LIST
 
 def _cb(text: str, data: str, style: str = None) -> InlineKeyboardButton:
     """Callback button, optional colour."""
-    if style:
-        return InlineKeyboardButton(text, callback_data=data, style=style)
-    return InlineKeyboardButton(text, callback_data=data)
+    kw = {"api_kwargs": {"style": style}} if style else {}
+    return InlineKeyboardButton(text, callback_data=data, **kw)
 
 
 def _url(text: str, link: str, style: str = None) -> InlineKeyboardButton:
     """URL button, optional colour."""
-    if style:
-        return InlineKeyboardButton(text, url=link, style=style)
-    return InlineKeyboardButton(text, url=link)
+    kw = {"api_kwargs": {"style": style}} if style else {}
+    return InlineKeyboardButton(text, url=link, **kw)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
