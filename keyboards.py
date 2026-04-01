@@ -88,25 +88,25 @@ def game_action_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
             _url("➕ Add Me",  BOT_INVITE_LINK, style="success"),
-            _url("📢 Updates", UPDATES_CHANNEL),      # external link — no colour
+            _url("📢 Updates", UPDATES_CHANNEL),
         ],
         [
-            _cb("💡 Hint",     "cb:hint",    style="primary"),
-            _cb("🚩 End Game", "cb:endgame", style="danger"),
+            _url("🎮 Play Games", SUPPORT_GROUP, style="primary"),
+            _cb("🚩 End Game",   "cb:endgame",  style="danger"),
         ],
     ])
 
 
 def hard_action_kb() -> InlineKeyboardMarkup:
-    """Buttons under the grid image during a HARD MODE round — Support replaces Hint."""
+    """Buttons under the grid image during a HARD MODE round."""
     return InlineKeyboardMarkup([
         [
-            _url("➕ Add Me",   BOT_INVITE_LINK, style="success"),
-            _url("📢 Updates",  UPDATES_CHANNEL),
+            _url("➕ Add Me",    BOT_INVITE_LINK, style="success"),
+            _url("📢 Updates",   UPDATES_CHANNEL),
         ],
         [
-            _url("🆘 Support",  SUPPORT_GROUP,   style="primary"),
-            _cb("🚩 End Game",  "cb:endgame",    style="danger"),
+            _url("🎮 Play Games", SUPPORT_GROUP,  style="primary"),
+            _cb("🚩 End Game",   "cb:endgame",    style="danger"),
         ],
     ])
 
