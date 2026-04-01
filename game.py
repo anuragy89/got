@@ -16,11 +16,8 @@ HARD_N_WORDS_MIN      = 10
 HARD_N_WORDS_MAX      = 15
 HARD_DURATION_MIN     = 300   # secs
 HARD_DURATION_MAX     = 360   # secs
-HARD_POINTS_PER_WORD  = 12    # pts per normal find in hard mode
-HARD_FIRST_PTS        = 15    # pts for first find in hard mode
-# Resolved at session start (randomised within range)
-HARD_DURATION  = 330          # default mid-range; overridden per session
-HARD_GRID_SIZE = 11
+HARD_POINTS_PER_WORD  = 10    # pts per normal find in hard mode (min)
+HARD_FIRST_PTS        = 25    # pts for first find in hard mode (max)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  ROUND LEVEL TABLE  (12 rounds)
@@ -90,8 +87,16 @@ class GameSession:
         self.p_combos[uid] = combo
         is_first = len(self.found_words) == 0
         if self.is_hard:
-            # Hard mode: flat high pts, first finder gets +2 bonus
-            pts = HARD_FIRST_PTS if is_first else HARD_POINTS_PER_WORD
+            # Hard mode: 1st word = 25 pts, scales down to 10 pts by last word.
+            # e.g. 15 words: 25, 24, 23, 21, 20, 19, 17, 16, 15, 13, 12, 11, 10, 10, 10
+            n_total = max(len(self.words), 1)
+            pos     = len(self.found_words)   # 0-indexed, before appending
+            if n_total > 1:
+                pts = round(HARD_FIRST_PTS - (HARD_FIRST_PTS - HARD_POINTS_PER_WORD)
+                            * pos / (n_total - 1))
+            else:
+                pts = HARD_FIRST_PTS
+            pts = max(HARD_POINTS_PER_WORD, min(HARD_FIRST_PTS, pts))
         else:
             # Normal mode: base pts scale up by 1 per round
             bonus = self.round_num - 1          # +0 on R1, +1 on R2, +2 on R3 …
