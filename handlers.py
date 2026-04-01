@@ -175,7 +175,15 @@ async def _launch(chat_id, theme_key, round_num, ctx):
     t = THEMES[theme_key]
 
     loop = asyncio.get_event_loop()
-    grid, words, placed = await loop.run_in_executor(None, build_puzzle, theme_key, grid_size, n_words)
+    try:
+        grid, words, placed = await loop.run_in_executor(None, build_puzzle, theme_key, grid_size, n_words)
+    except ValueError as e:
+        log.error(f"_launch: {e}")
+        try:
+            await ctx.bot.send_message(chat_id, "⚠️ Couldn't generate puzzle — try /newgame again!", parse_mode=ParseMode.HTML)
+        except TelegramError:
+            pass
+        return
     img = await loop.run_in_executor(None, render_image, theme_key, grid, placed, [], round_num, grid_size)
 
     session = GameSession(chat_id, theme_key, grid, words, placed, round_num, img)
