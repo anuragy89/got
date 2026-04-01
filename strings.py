@@ -27,13 +27,14 @@ def start_private(name: str) -> str:
         f"{ICO_PUZZLE()} I'm a <b>Word Grid Puzzle Game Bot</b> made for Telegram groups.\n"
         f"I drop beautiful themed grid images — you find hidden words!\n\n"
         f"<b>┌ How to play</b>\n"
-        f"<b>│</b> {ICO_JOYSTICK()} Bot drops a colourful themed grid in your group\n"
+        f"<b>│</b> {ICO_JOYSTICK()} Bot drops a themed grid in your group\n"
         f"<b>│</b> {ICO_LIGHTNING()} Type any word you spot to claim it\n"
         f"<b>│</b> {ICO_FIRE()} Build combos for up to <b>3×</b> bonus points\n"
         f"<b>│</b> {ICO_TROPHY()} Most words found = <b>WINNER</b>!\n"
         f"<b>└────────────────────</b>\n\n"
         f"<b>│20 Themes</b>\n"
-       
+
+        
         f"{ICO_DIAMOND()} <b>Add me to your group and start playing now!</b>"
     )
 
