@@ -945,8 +945,10 @@ def _fill(grid: list, size: int):
 
 def build_puzzle(theme_key: str, size: int, n_words: int) -> tuple:
     """Returns (grid, words_list, placed_list)."""
-    # Filter words that fit in this grid size
-    eligible = [w for w in THEMES[theme_key]["words"] if len(w) <= size]
+    # Filter words that fit in this grid size AND are at least 3 letters
+    eligible = [w for w in THEMES[theme_key]["words"] if 3 <= len(w) <= size]
+    if not eligible:
+        eligible = [w for w in THEMES[theme_key]["words"] if len(w) <= size]
     pool = random.sample(eligible, min(len(eligible), n_words + 10))
     grid = _empty(size)
     words, placed = [], []
@@ -958,6 +960,8 @@ def build_puzzle(theme_key: str, size: int, n_words: int) -> tuple:
             words.append(w)
             placed.append({"word": w, "cells": cells})
     _fill(grid, size)
+    if not words:
+        raise ValueError(f"build_puzzle: 0 words placed for theme={theme_key} size={size}")
     return grid, words, placed
 
 
