@@ -65,7 +65,7 @@ def start_kb() -> InlineKeyboardMarkup:
         ],
         [
             _cb("❓ Help",         "cb:help"),          # neutral — no colour
-            _cb("🏆 Global Board", "cb:globalboard", style="primary"),
+            _cb("🏆 Global Board", "cb:globalboard"),
         ],
     ])
 
@@ -88,7 +88,7 @@ def game_action_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
             _url("➕ Add Me",  BOT_INVITE_LINK, style="success"),
-            _url("📢 Updates", UPDATES_CHANNEL),
+            _url("📢 Updates", UPDATES_CHANNEL, style="primary"),
         ],
         [
             _url("🎮 Play Games", SUPPORT_GROUP, style="primary"),
@@ -102,7 +102,7 @@ def hard_action_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
             _url("➕ Add Me",    BOT_INVITE_LINK, style="success"),
-            _url("📢 Updates",   UPDATES_CHANNEL),
+            _url("📢 Updates",   UPDATES_CHANNEL, style="primary"),
         ],
         [
             _url("🎮 Play Games", SUPPORT_GROUP,  style="primary"),
@@ -134,7 +134,7 @@ def next_round_kb(next_round: int, theme_key: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
             _cb(f"▶️ Start Round {next_round}",
-                f"nextround:{theme_key}:{next_round}", style="success"),
+                f"nextround:{theme_key}:{next_round}", style="danger"),
         ],
         [
             _cb("🏆 Leaderboard", "cb:leaderboard", style="primary"),
@@ -177,11 +177,11 @@ def leaderboard_kb(next_round: int = 0, theme_key: str = "") -> InlineKeyboardMa
     rows = [
         [
             _cb("🌍 Global Board", "cb:globalboard", style="primary"),  # ← was missing colour
-            _cb("🔄 Refresh",      "cb:leaderboard"),                    # neutral
+            _cb("🔄 Refresh",      "cb:leaderboard", style="primary"),                     # neutral
         ],
         [
             _cb("🎮 New Game", "theme:random", style="success"),
-            _cb("❓ Help",     "cb:help"),                               # neutral
+            _cb("❓ Help",     "cb:help",  style="success"),                               # neutral
         ],
     ]
     if next_round > 0 and theme_key:
