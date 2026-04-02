@@ -779,3 +779,16 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         except TelegramError:
             pass
         await _launch(chat.id, key, round_num=1, ctx=ctx)
+
+
+# ── Global error handler ──────────────────────────────────────────
+async def error_handler(update: object, ctx: ContextTypes.DEFAULT_TYPE):
+    """Catches ALL unhandled exceptions — logs them instead of silently dropping."""
+    log.error("Unhandled exception:", exc_info=ctx.error)
+    if isinstance(update, Update) and update.effective_message:
+        try:
+            await update.effective_message.reply_text(
+                "⚠️ Something went wrong. Please try again in a moment."
+            )
+        except TelegramError:
+            pass
