@@ -22,19 +22,22 @@ def ICO_JOYSTICK():  return _pe(PEMOJI_JOYSTICK,  "🕹️")
 def ICO_MEDAL():     return _pe(PEMOJI_MEDAL,     "🎖️")
 
 def start_private(name: str) -> str:
+    # NOTE: box-drawing chars (┌│└─) must NOT be inside <b> tags —
+    # Telegram HTML parser rejects them and throws BadRequest.
     return (
         f"{ICO_ROCKET()} <b>Hey {name}, welcome to WordGrid Bot!</b>\n\n"
         f"{ICO_PUZZLE()} I'm a <b>Word Grid Puzzle Game Bot</b> made for Telegram groups.\n"
-        f"I drop beautiful themed grid images — you find hidden words!\n\n"
-        f"<b>┌ How to play</b>\n"
-        f"<b>│</b> {ICO_JOYSTICK()} Bot drops a themed grid in your group\n"
-        f"<b>│</b> {ICO_LIGHTNING()} Type any word you spot to claim it\n"
-        f"<b>│</b> {ICO_FIRE()} Build combos for up to <b>3×</b> bonus points\n"
-        f"<b>│</b> {ICO_TROPHY()} Most words found = <b>WINNER</b>!\n"
-        f"<b>└────────────────────</b>\n\n"
-        f"<b>│ 20 Themes</b>\n"
-       
-    
+        f"I drop beautiful themed grid images - you find hidden words!\n\n"
+        f"<b>How to play</b>\n"
+        f"  {ICO_JOYSTICK()} Bot drops a colourful themed grid in your group\n"
+        f"  {ICO_LIGHTNING()} Type any word you spot to claim it\n"
+        f"  {ICO_FIRE()} Build combos for up to <b>3x</b> bonus points\n"
+        f"  {ICO_TROPHY()} Most words found = <b>WINNER</b>!\n\n"
+        f"<b>20 Themes</b>\n"
+        f"  🐾 Animals  🍎 Fruits  🌊 Ocean  🚀 Space  ⚽ Sports\n"
+        f"  🌍 Countries  🍕 Food  🎬 Bollywood  🔬 Science  💻 Tech\n"
+        f"  ⚡ Mythology  🎵 Music  🗺 Geography  🎥 Movies  🏛 History\n"
+        f"  🏏 Cricket  🌿 Nature  🚗 Vehicles  🫀 Body  🎮 Games\n\n"
         f"{ICO_DIAMOND()} <b>Add me to your group and start playing now!</b>"
     )
 
@@ -51,7 +54,6 @@ def new_group_welcome(title: str) -> str:
         f"{ICO_JOYSTICK()} I bring <b>Word Grid Puzzle Games</b> to your group.\n\n"
         f"<b>┌ Quick start</b>\n"
         f"<b>│</b> /newgame — Start round 1\n"
-        f"<b>│</b> /newhard — Start hard round 1\n"
         f"<b>│</b> /hint — Get a letter hint during a game\n"
         f"<b>│</b> /theme — Pick a fun theme\n"
         f"<b>│</b> /leaderboard — See top players\n"
@@ -70,7 +72,6 @@ def help_text() -> str:
         f"{ICO_PUZZLE()} <b>WordGrid Bot — Commands</b>\n\n"
         f"{ICO_JOYSTICK()} <b>Game</b>\n"
         f"  /newgame — Start round 1 (random theme)\n"
-        f"  /newhard — Start hard round 1 (random theme)\n"
         f"  /newgame [theme] — e.g. /newgame space\n"
         f"  /theme — Browse & pick a theme\n"
         f"  /hint — Reveal hints for all hidden words\n"
@@ -185,19 +186,18 @@ def leaderboard_text(rows, title) -> str:
 
 def global_leaderboard_text(rows, title) -> str:
     """
-    Global leaderboard — every name is a clickable link:
-      • t.me/username  if the user has a Telegram username  (always works)
-      • tg://user?id=  fallback for users without a username
+    Global leaderboard with clickable user mentions.
+    Priority: @username link (always works) > tg://user?id (works if user DM'd bot) > plain bold
     """
     if not rows:
         return f"{ICO_TROPHY()} <b>{title}</b>\n\nNo scores yet — play /newgame to get started!"
     lines = [f"{ICO_TROPHY()} <b>{title}</b>", "━" * 26]
     for i, row in enumerate(rows):
-        med      = MEDALS[i] if i < 3 else f"  {i+1}."
-        wf       = row.get("words_found", 0)
-        uid      = row.get("user_id")
-        uname    = row.get("username")
-        name     = row["name"]
+        med   = MEDALS[i] if i < 3 else f"  {i+1}."
+        wf    = row.get("words_found", 0)
+        uid   = row.get("user_id")
+        uname = row.get("username", "")
+        name  = row["name"]
         if uname:
             name_tag = f'<a href="https://t.me/{uname}">{name}</a>'
         elif uid:
