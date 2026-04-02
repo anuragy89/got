@@ -104,7 +104,8 @@ async def count_groups() -> int:
 
 # ── Leaderboard ──────────────────────────────────────────────────
 
-async def add_score(chat_id: int, user_id: int, name: str, pts: int, words: int = 1):
+async def add_score(chat_id: int, user_id: int, name: str, pts: int, words: int = 1,
+                    username: str = None):
     # Group board
     await db.leaderboard.update_one(
         {"chat_id": chat_id, "user_id": user_id},
@@ -115,12 +116,15 @@ async def add_score(chat_id: int, user_id: int, name: str, pts: int, words: int 
         },
         upsert=True,
     )
-    # Global board
+    # Global board — store username so leaderboard can build clickable profile links
+    global_set = {"name": name}
+    if username:
+        global_set["username"] = username
     await db.global_lb.update_one(
         {"user_id": user_id},
         {
             "$inc": {"score": pts, "words_found": words},
-            "$set": {"name": name},
+            "$set": global_set,
             "$setOnInsert": {"user_id": user_id},
         },
         upsert=True,
