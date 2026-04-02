@@ -34,7 +34,7 @@ def start_private(name: str) -> str:
         f"<b>└────────────────────</b>\n\n"
         f"<b>│ 20 Themes</b>\n"
        
-        f"<b>/b>\n\n"
+    
         f"{ICO_DIAMOND()} <b>Add me to your group and start playing now!</b>"
     )
 
