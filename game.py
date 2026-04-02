@@ -60,6 +60,7 @@ class GameSession:
         self.p_combos     : Dict[int,int]  = {}
         self.p_scores     : Dict[int,int]  = {}
         self.p_names      : Dict[int,str]  = {}
+        self.p_usernames  : Dict[int,str]  = {}
         self.p_found_cnt  : Dict[int,int]  = {}
         self.active       = True
         self.started_at   = time.time()
@@ -82,7 +83,7 @@ class GameSession:
     def already_found(self, word: str) -> bool:
         return word in self.found_words
 
-    def register(self, word: str, uid: int, name: str) -> int:
+    def register(self, word: str, uid: int, name: str, username: str = None) -> int:
         combo = min(self.p_combos.get(uid, 0) + 1, 5)
         self.p_combos[uid] = combo
         is_first = len(self.found_words) == 0
@@ -107,6 +108,8 @@ class GameSession:
         self.finders[word] = {"user_id": uid, "name": name, "pts": pts, "combo": combo}
         self.p_scores[uid]    = self.p_scores.get(uid, 0) + pts
         self.p_names[uid]     = name
+        if username:
+            self.p_usernames[uid] = username
         self.p_found_cnt[uid] = self.p_found_cnt.get(uid, 0) + 1
         return pts
 
@@ -121,7 +124,7 @@ class GameSession:
 
     def summary(self) -> list:
         return sorted(
-            [{"user_id": uid, "name": self.p_names[uid],
+            [{"user_id": uid, "name": self.p_names[uid], "username": self.p_usernames.get(uid),
               "score": self.p_scores[uid],
               "words": self.p_found_cnt.get(uid, 0)}
              for uid in self.p_scores],
