@@ -116,7 +116,7 @@ async def add_score(chat_id: int, user_id: int, name: str, pts: int, words: int 
         },
         upsert=True,
     )
-    # Global board — store username so leaderboard can build clickable profile links
+    # Global board — store username for clickable leaderboard mentions
     global_set = {"name": name}
     if username:
         global_set["username"] = username
