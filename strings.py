@@ -22,19 +22,18 @@ def ICO_JOYSTICK():  return _pe(PEMOJI_JOYSTICK,  "🕹️")
 def ICO_MEDAL():     return _pe(PEMOJI_MEDAL,     "🎖️")
 
 def start_private(name: str) -> str:
-    # NOTE: box-drawing chars (┌│└─) must NOT be inside <b> tags —
-    # Telegram HTML parser rejects them and throws BadRequest.
+    # Kept under 1024 chars (Telegram caption limit).
+    # No box-drawing chars (┌│└─) inside <b> tags — Telegram HTML rejects them.
     return (
         f"{ICO_ROCKET()} <b>Hey {name}, welcome to WordGrid Bot!</b>\n\n"
-        f"{ICO_PUZZLE()} I'm a <b>Word Grid Puzzle Game Bot</b> made for Telegram groups.\n"
-        f"I drop beautiful themed grid images - you find hidden words!\n\n"
+        f"{ICO_PUZZLE()} I'm a <b>Word Grid Puzzle Game Bot</b> for Telegram groups.\n"
+        f"Drop a themed grid — players find hidden words!\n\n"
         f"<b>How to play</b>\n"
-        f"  {ICO_JOYSTICK()} Bot drops a colourful themed grid in your group\n"
-        f"  {ICO_LIGHTNING()} Type any word you spot to claim it\n"
-        f"  {ICO_FIRE()} Build combos for up to <b>3x</b> bonus points\n"
-        f"  {ICO_TROPHY()} Most words found = <b>WINNER</b>!\n\n"
-        f"<b>20 Themes</b>\n"
-       
+        f"{ICO_JOYSTICK()} Bot sends a colourful grid in your group\n"
+        f"{ICO_LIGHTNING()} Type any hidden word to claim it\n"
+        f"{ICO_FIRE()} Chain words for up to <b>3x</b> combo bonus\n"
+        f"{ICO_TROPHY()} Most words found = <b>WINNER</b>\n\n"
+        f"<b>20 Themes</b> — Animals, Space, Bollywood, Cricket, Food, Ocean and more!\n\n"
         f"{ICO_DIAMOND()} <b>Add me to your group and start playing now!</b>"
     )
 
@@ -180,30 +179,6 @@ def leaderboard_text(rows, title) -> str:
         med = MEDALS[i] if i < 3 else f"  {i+1}."
         wf  = row.get("words_found", 0)
         lines.append(f"{med} <b>{row['name']}</b> — {row['score']} pts <i>({wf} words)</i>")
-    return "\n".join(lines)
-
-
-def global_leaderboard_text(rows, title) -> str:
-    """
-    Global leaderboard with clickable user mentions.
-    Priority: @username link (always works) > tg://user?id (works if user DM'd bot) > plain bold
-    """
-    if not rows:
-        return f"{ICO_TROPHY()} <b>{title}</b>\n\nNo scores yet — play /newgame to get started!"
-    lines = [f"{ICO_TROPHY()} <b>{title}</b>", "━" * 26]
-    for i, row in enumerate(rows):
-        med   = MEDALS[i] if i < 3 else f"  {i+1}."
-        wf    = row.get("words_found", 0)
-        uid   = row.get("user_id")
-        uname = row.get("username", "")
-        name  = row["name"]
-        if uname:
-            name_tag = f'<a href="https://t.me/{uname}">{name}</a>'
-        elif uid:
-            name_tag = f'<a href="tg://user?id={uid}">{name}</a>'
-        else:
-            name_tag = f"<b>{name}</b>"
-        lines.append(f"{med} {name_tag} — {row['score']} pts <i>({wf} words)</i>")
     return "\n".join(lines)
 
 def my_stats(first_name, doc) -> str:
