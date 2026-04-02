@@ -107,7 +107,8 @@ async def _end_round(chat_id, session, ctx, from_timer=False):
     round_complete = session.complete()
 
     for row in summary:
-        await db.add_score(chat_id, row["user_id"], row["name"], row["score"], row["words"])
+        await db.add_score(chat_id, row["user_id"], row["name"], row["score"], row["words"],
+                              username=row.get("username"))
 
     next_theme = (
         pick_next_round_theme(chat_id, session.theme, THEME_LIST)
@@ -427,7 +428,7 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if session.valid_guess(word):
         name  = user.first_name or user.username or "Player"
-        pts   = session.register(word, user.id, name)
+        pts   = session.register(word, user.id, name, username=user.username)
         left  = len(session.words) - len(session.found_words)
         combo = session.p_combos.get(user.id, 1)
         await db.upsert_user(user)
