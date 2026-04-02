@@ -27,7 +27,7 @@ from puzzle import build_puzzle, render_image, THEMES, THEME_LIST
 from strings import (
     start_private, start_group, new_group_welcome, help_text,
     game_start_caption, word_found, round_end,
-    leaderboard_text, global_leaderboard_text, my_stats, bot_stats,
+    leaderboard_text, my_stats, bot_stats,
     BROADCAST_USAGE, broadcast_done,
     hint_text, no_hint_text, IDLE_NUDGES,
     ICO_FIRE, ICO_PUZZLE, ICO_TROPHY, ICO_STAR, ICO_CROWN, ICO_ROCKET,
@@ -107,8 +107,7 @@ async def _end_round(chat_id, session, ctx, from_timer=False):
     round_complete = session.complete()
 
     for row in summary:
-        await db.add_score(chat_id, row["user_id"], row["name"], row["score"], row["words"],
-                              username=row.get("username"))
+        await db.add_score(chat_id, row["user_id"], row["name"], row["score"], row["words"])
 
     next_theme = (
         pick_next_round_theme(chat_id, session.theme, THEME_LIST)
@@ -211,6 +210,14 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     await db.upsert_user(user)
     if chat.type == ChatType.PRIVATE:
+        BANNER_URL = "https://ibb.co/JjJrTmBt"
+        # Send banner image first with NO caption — Telegram captions are capped at
+        # 1024 chars and truncate HTML mid-tag, causing "unclosed <b>" BadRequest errors.
+        try:
+            await update.message.reply_photo(photo=BANNER_URL)
+        except TelegramError:
+            pass  # image failure is non-fatal — text message always follows
+        # Full welcome text + buttons as a separate message (no length limit)
         await update.message.reply_text(
             start_private(user.first_name), parse_mode=ParseMode.HTML, reply_markup=start_kb()
         )
@@ -428,7 +435,7 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if session.valid_guess(word):
         name  = user.first_name or user.username or "Player"
-        pts   = session.register(word, user.id, name, username=user.username)
+        pts   = session.register(word, user.id, name)
         left  = len(session.words) - len(session.found_words)
         combo = session.p_combos.get(user.id, 1)
         await db.upsert_user(user)
@@ -507,7 +514,7 @@ async def cmd_leaderboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def cmd_globalboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     rows = await db.global_leaderboard()
     await update.message.reply_text(
-        global_leaderboard_text(rows, "🌍 Global Leaderboard"),
+        leaderboard_text(rows, "🌍 Global Leaderboard"),
         parse_mode=ParseMode.HTML, reply_markup=leaderboard_kb(),
     )
 
@@ -625,7 +632,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elif data == "cb:leaderboard":
         if chat.type == ChatType.PRIVATE:
             rows, title = await db.global_leaderboard(), "🌍 Global Leaderboard"
-            await _safe_edit_text(q, global_leaderboard_text(rows, title), reply_markup=leaderboard_kb())
+            await _safe_edit_text(q, leaderboard_text(rows, title), reply_markup=leaderboard_kb())
         else:
             rows, title = await db.group_leaderboard(chat.id), f"🏆 {chat.title}"
             pending = _pending_next.get(chat.id)
@@ -642,7 +649,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         pending = _pending_next.get(chat.id)
         nr, tk  = pending if pending else (0, "")
         await _safe_edit_text(
-            q, global_leaderboard_text(rows, "🌍 Global Leaderboard"),
+            q, leaderboard_text(rows, "🌍 Global Leaderboard"),
             reply_markup=globalboard_kb(next_round=nr, theme_key=tk),
         )
 
