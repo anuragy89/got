@@ -27,7 +27,7 @@ from puzzle import build_puzzle, render_image, THEMES, THEME_LIST
 from strings import (
     start_private, start_group, new_group_welcome, help_text,
     game_start_caption, word_found, round_end,
-    leaderboard_text, my_stats, bot_stats,
+    leaderboard_text, global_leaderboard_text, my_stats, bot_stats,
     BROADCAST_USAGE, broadcast_done,
     hint_text, no_hint_text, IDLE_NUDGES,
     ICO_FIRE, ICO_PUZZLE, ICO_TROPHY, ICO_STAR, ICO_CROWN, ICO_ROCKET,
@@ -210,19 +210,9 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     await db.upsert_user(user)
     if chat.type == ChatType.PRIVATE:
-        BANNER_URL = "https://ibb.co/JjJrTmBt"
-        try:
-            await update.message.reply_photo(
-                photo=BANNER_URL,
-                caption=start_private(user.first_name),
-                parse_mode=ParseMode.HTML,
-                reply_markup=start_kb(),
-            )
-        except TelegramError:
-            # Fallback: if image fails, send text-only
-            await update.message.reply_text(
-                start_private(user.first_name), parse_mode=ParseMode.HTML, reply_markup=start_kb()
-            )
+        await update.message.reply_text(
+            start_private(user.first_name), parse_mode=ParseMode.HTML, reply_markup=start_kb()
+        )
     else:
         await db.upsert_group(chat)
         await update.message.reply_text(start_group(), parse_mode=ParseMode.HTML)
@@ -516,7 +506,7 @@ async def cmd_leaderboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def cmd_globalboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     rows = await db.global_leaderboard()
     await update.message.reply_text(
-        leaderboard_text(rows, "🌍 Global Leaderboard"),
+        global_leaderboard_text(rows, "🌍 Global Leaderboard"),
         parse_mode=ParseMode.HTML, reply_markup=leaderboard_kb(),
     )
 
@@ -634,7 +624,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elif data == "cb:leaderboard":
         if chat.type == ChatType.PRIVATE:
             rows, title = await db.global_leaderboard(), "🌍 Global Leaderboard"
-            await _safe_edit_text(q, leaderboard_text(rows, title), reply_markup=leaderboard_kb())
+            await _safe_edit_text(q, global_leaderboard_text(rows, title), reply_markup=leaderboard_kb())
         else:
             rows, title = await db.group_leaderboard(chat.id), f"🏆 {chat.title}"
             pending = _pending_next.get(chat.id)
@@ -651,7 +641,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         pending = _pending_next.get(chat.id)
         nr, tk  = pending if pending else (0, "")
         await _safe_edit_text(
-            q, leaderboard_text(rows, "🌍 Global Leaderboard"),
+            q, global_leaderboard_text(rows, "🌍 Global Leaderboard"),
             reply_markup=globalboard_kb(next_round=nr, theme_key=tk),
         )
 
