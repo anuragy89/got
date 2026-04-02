@@ -27,7 +27,7 @@ from puzzle import build_puzzle, render_image, THEMES, THEME_LIST
 from strings import (
     start_private, start_group, new_group_welcome, help_text,
     game_start_caption, word_found, round_end,
-    leaderboard_text, my_stats, bot_stats,
+    leaderboard_text, global_leaderboard_text, my_stats, bot_stats,
     BROADCAST_USAGE, broadcast_done,
     hint_text, no_hint_text, IDLE_NUDGES,
     ICO_FIRE, ICO_PUZZLE, ICO_TROPHY, ICO_STAR, ICO_CROWN, ICO_ROCKET,
@@ -107,7 +107,8 @@ async def _end_round(chat_id, session, ctx, from_timer=False):
     round_complete = session.complete()
 
     for row in summary:
-        await db.add_score(chat_id, row["user_id"], row["name"], row["score"], row["words"])
+        await db.add_score(chat_id, row["user_id"], row["name"], row["score"], row["words"],
+                              username=row.get("username"))
 
     next_theme = (
         pick_next_round_theme(chat_id, session.theme, THEME_LIST)
@@ -210,14 +211,12 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     await db.upsert_user(user)
     if chat.type == ChatType.PRIVATE:
-        BANNER_URL = "https://ibb.co/JjJrTmBt"
-        # Send banner image first with NO caption — Telegram captions are capped at
-        # 1024 chars and truncate HTML mid-tag, causing "unclosed <b>" BadRequest errors.
+        # Send banner image first (no caption — avoids 1024-char HTML truncation/BadRequest)
         try:
-            await update.message.reply_photo(photo=BANNER_URL)
+            await update.message.reply_photo(photo="https://ibb.co/JjJrTmBt")
         except TelegramError:
-            pass  # image failure is non-fatal — text message always follows
-        # Full welcome text + buttons as a separate message (no length limit)
+            pass  # image failure is non-fatal, text always follows
+        # Full HTML welcome text + buttons as a separate message (no length limit)
         await update.message.reply_text(
             start_private(user.first_name), parse_mode=ParseMode.HTML, reply_markup=start_kb()
         )
@@ -435,7 +434,7 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if session.valid_guess(word):
         name  = user.first_name or user.username or "Player"
-        pts   = session.register(word, user.id, name)
+        pts   = session.register(word, user.id, name, username=user.username)
         left  = len(session.words) - len(session.found_words)
         combo = session.p_combos.get(user.id, 1)
         await db.upsert_user(user)
@@ -514,7 +513,7 @@ async def cmd_leaderboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def cmd_globalboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     rows = await db.global_leaderboard()
     await update.message.reply_text(
-        leaderboard_text(rows, "🌍 Global Leaderboard"),
+        global_leaderboard_text(rows, "🌍 Global Leaderboard"),
         parse_mode=ParseMode.HTML, reply_markup=leaderboard_kb(),
     )
 
@@ -632,7 +631,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elif data == "cb:leaderboard":
         if chat.type == ChatType.PRIVATE:
             rows, title = await db.global_leaderboard(), "🌍 Global Leaderboard"
-            await _safe_edit_text(q, leaderboard_text(rows, title), reply_markup=leaderboard_kb())
+            await _safe_edit_text(q, global_leaderboard_text(rows, title), reply_markup=leaderboard_kb())
         else:
             rows, title = await db.group_leaderboard(chat.id), f"🏆 {chat.title}"
             pending = _pending_next.get(chat.id)
@@ -649,7 +648,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         pending = _pending_next.get(chat.id)
         nr, tk  = pending if pending else (0, "")
         await _safe_edit_text(
-            q, leaderboard_text(rows, "🌍 Global Leaderboard"),
+            q, global_leaderboard_text(rows, "🌍 Global Leaderboard"),
             reply_markup=globalboard_kb(next_round=nr, theme_key=tk),
         )
 
@@ -773,3 +772,19 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         except TelegramError:
             pass
         await _launch(chat.id, key, round_num=1, ctx=ctx)
+
+
+# ── Global error handler ──────────────────────────────────────────
+# Catches ALL unhandled exceptions so they get logged instead of
+# silently dropped (or crashing the update loop on Heroku).
+
+async def error_handler(update: object, ctx: ContextTypes.DEFAULT_TYPE):
+    log.error("Unhandled exception while processing update:", exc_info=ctx.error)
+    # Notify the user something went wrong (only if we have a message to reply to)
+    if isinstance(update, Update) and update.effective_message:
+        try:
+            await update.effective_message.reply_text(
+                "⚠️ Something went wrong. Please try again in a moment."
+            )
+        except TelegramError:
+            pass
