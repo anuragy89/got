@@ -34,10 +34,7 @@ def start_private(name: str) -> str:
         f"  {ICO_FIRE()} Build combos for up to <b>3x</b> bonus points\n"
         f"  {ICO_TROPHY()} Most words found = <b>WINNER</b>!\n\n"
         f"<b>20 Themes</b>\n"
-        f"  🐾 Animals  🍎 Fruits  🌊 Ocean  🚀 Space  ⚽ Sports\n"
-        f"  🌍 Countries  🍕 Food  🎬 Bollywood  🔬 Science  💻 Tech\n"
-        f"  ⚡ Mythology  🎵 Music  🗺 Geography  🎥 Movies  🏛 History\n"
-        f"  🏏 Cricket  🌿 Nature  🚗 Vehicles  🫀 Body  🎮 Games\n\n"
+       
         f"{ICO_DIAMOND()} <b>Add me to your group and start playing now!</b>"
     )
 
@@ -54,6 +51,7 @@ def new_group_welcome(title: str) -> str:
         f"{ICO_JOYSTICK()} I bring <b>Word Grid Puzzle Games</b> to your group.\n\n"
         f"<b>┌ Quick start</b>\n"
         f"<b>│</b> /newgame — Start round 1\n"
+        f"<b>│</b> /newhard — Start hard round 1\n"
         f"<b>│</b> /hint — Get a letter hint during a game\n"
         f"<b>│</b> /theme — Pick a fun theme\n"
         f"<b>│</b> /leaderboard — See top players\n"
@@ -72,6 +70,7 @@ def help_text() -> str:
         f"{ICO_PUZZLE()} <b>WordGrid Bot — Commands</b>\n\n"
         f"{ICO_JOYSTICK()} <b>Game</b>\n"
         f"  /newgame — Start round 1 (random theme)\n"
+        f"  /newhard — Start hard round 1 (random theme)\n"
         f"  /newgame [theme] — e.g. /newgame space\n"
         f"  /theme — Browse & pick a theme\n"
         f"  /hint — Reveal hints for all hidden words\n"
