@@ -21,6 +21,7 @@ from telegram.request import HTTPXRequest
 import database as db
 from config import BOT_TOKEN, IDLE_NUDGE_CHECK
 from handlers import (
+    error_handler,
     cmd_hint,
     cmd_start, cmd_help, cmd_theme, cmd_newgame, cmd_newhard,
     cmd_leaderboard, cmd_globalboard, cmd_mystats,
@@ -98,6 +99,9 @@ def build_app() -> Application:
             on_message,
         )
     )
+
+    # ── Global error handler — logs all errors instead of silently dropping them ──
+    app.add_error_handler(error_handler)
 
     return app
 
