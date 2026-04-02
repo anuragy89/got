@@ -21,14 +21,13 @@ from telegram.request import HTTPXRequest
 import database as db
 from config import BOT_TOKEN, IDLE_NUDGE_CHECK
 from handlers import (
-    error_handler,
     cmd_hint,
     cmd_start, cmd_help, cmd_theme, cmd_newgame, cmd_newhard,
     cmd_leaderboard, cmd_globalboard, cmd_mystats,
     cmd_endgame, cmd_resetboard,
     cmd_broadcast, cmd_stats,
     on_message, on_callback, on_my_chat_member,
-    idle_nudge_job,
+    idle_nudge_job, error_handler,
 )
 
 # ── Logging ───────────────────────────────────────────────────────
@@ -100,7 +99,7 @@ def build_app() -> Application:
         )
     )
 
-    # ── Global error handler — logs all errors instead of silently dropping them ──
+    # ── Global error handler ──
     app.add_error_handler(error_handler)
 
     return app
