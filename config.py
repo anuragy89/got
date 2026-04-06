@@ -52,7 +52,7 @@ PEMOJI_MEDAL     = os.getenv("PEMOJI_MEDAL",     "5440539497383087970")
 ROUND_DURATION   = int(os.getenv("ROUND_DURATION",   "90"))
 GRID_SIZE        = int(os.getenv("GRID_SIZE",        "10"))
 WORDS_PER_ROUND  = int(os.getenv("WORDS_PER_ROUND",  "8"))
-COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", "5"))
+COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", "3"))
 
 POINTS_PER_WORD     = int(os.getenv("POINTS_PER_WORD",     "3"))   # pts per word found
 FIRST_FIND_PTS      = int(os.getenv("FIRST_FIND_PTS",      "4"))   # pts for very first word in round
@@ -76,7 +76,7 @@ MSG_DELETE_AFTER = int(os.getenv("MSG_DELETE_AFTER", "4800"))
 #                     checks for idle groups.
 #                     Default: 1800 (30 min)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-IDLE_NUDGE_AFTER = int(os.getenv("IDLE_NUDGE_AFTER", "10800"))
+IDLE_NUDGE_AFTER = int(os.getenv("IDLE_NUDGE_AFTER", "21600"))
 IDLE_NUDGE_CHECK = int(os.getenv("IDLE_NUDGE_CHECK", "1800"))
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
