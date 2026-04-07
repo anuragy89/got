@@ -949,7 +949,10 @@ def build_puzzle(theme_key: str, size: int, n_words: int) -> tuple:
     eligible = [w for w in THEMES[theme_key]["words"] if 3 <= len(w) <= size]
     if not eligible:
         eligible = [w for w in THEMES[theme_key]["words"] if len(w) <= size]
-    pool = random.sample(eligible, min(len(eligible), n_words + 10))
+    # Use a larger pool buffer for higher word counts so we always have
+    # enough candidates to successfully place n_words on the grid.
+    pool_size = min(len(eligible), max(n_words + 20, n_words * 3))
+    pool = random.sample(eligible, pool_size)
     grid = _empty(size)
     words, placed = [], []
     for w in pool:
