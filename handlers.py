@@ -9,6 +9,7 @@ from telegram.error import TelegramError, Forbidden, BadRequest
 from telegram.ext import ContextTypes
 
 from countdown_gif import build_countdown_gif
+import database as db
 from config import OWNER_ID, BROADCAST_DELAY, MSG_DELETE_AFTER, IDLE_NUDGE_AFTER
 from game import (
     sessions, GameSession, get_level, MAX_ROUNDS,
