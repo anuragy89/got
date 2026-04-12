@@ -972,7 +972,7 @@ def build_puzzle(theme_key: str, size: int, n_words: int) -> tuple:
 #  IMAGE RENDERER  (High Quality)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CELL   = 56          # base cell size (was 44)
-PAD    = 22          # padding around grid
+PAD    = 18          # padding around grid (tighter = less blank edge)
 HDR_H  = 100         # header height (was 80)
 CORNER = 10          # cell corner radius
 SCALE  = 2           # supersampling factor for anti-aliasing
@@ -1024,18 +1024,11 @@ def render_image(theme_key: str, grid: list, placed: list,
     base = Image.new("RGB", (W2, H2), t["bg"])
     draw = ImageDraw.Draw(base)
 
-    # ── Subtle gradient-like background with vignette dots ──────────
-    dot_col = tuple(min(v + 20, 255) for v in t["bg"])
-    dot_dim  = tuple(max(v - 5, 0) for v in t["bg"])
+    # ── Subtle dot texture (uniform — no vignette darkening at edges) ─
+    dot_col = tuple(min(v + 18, 255) for v in t["bg"])
     for x in range(0, W2, 28):
         for y in range(0, H2, 28):
-            # fade dots toward corners for vignette feel
-            cx_dist = abs(x - W2//2) / (W2//2)
-            cy_dist = abs(y - H2//2) / (H2//2)
-            dist    = (cx_dist**2 + cy_dist**2) ** 0.5
-            col = dot_col if dist < 0.6 else dot_dim
-            r   = s if dist < 0.4 else 1
-            draw.ellipse([x-r, y-r, x+r, y+r], fill=col)
+            draw.ellipse([x - s, y - s, x + s, y + s], fill=dot_col)
 
     # ── Header with gradient illusion ──────────────────────────────
     for i in range(hdr2):
