@@ -165,7 +165,7 @@ def round_end(summary, missed, theme_name, round_num, max_rounds, round_complete
         lines.append("🏁 <b>All 12 rounds complete! Great game!</b>")
         lines.append("Type /newgame to start fresh.")
     elif round_complete:
-        lines.append(f"{ICO_ROCKET()} <b>Round {round_num + 1} is next!</b> Press the button below.")
+        lines.append(f"{ICO_ROCKET()} <b>All words found!</b> Round {round_num + 1} starts automatically in 10s…")
     else:
         lines.append(f"⏰ <b>Time's up!</b> Not all words were found.")
         lines.append(f"Type /newgame to start a new game!")
