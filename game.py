@@ -14,8 +14,8 @@ log = logging.getLogger(__name__)
 HARD_GRID_SIZE        = 11
 HARD_N_WORDS_MIN      = 10
 HARD_N_WORDS_MAX      = 15
-HARD_DURATION_MIN     = 300   # secs
-HARD_DURATION_MAX     = 360   # secs
+HARD_DURATION_MIN     = 400   # secs
+HARD_DURATION_MAX     = 500   # secs
 HARD_POINTS_PER_WORD  = 10    # pts per normal find in hard mode (min)
 HARD_FIRST_PTS        = 25    # pts for first find in hard mode (max)
 
