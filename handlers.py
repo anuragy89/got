@@ -3,12 +3,12 @@ import io
 import logging
 import random
 
-from telegram import Update, InputMediaPhoto
+from telegram import Update, InputMediaPhoto, InputMediaAnimation
 from telegram.constants import ParseMode, ChatType
 from telegram.error import TelegramError, Forbidden, BadRequest
 from telegram.ext import ContextTypes
 
-import database as db
+from countdown_gif import build_countdown_gif
 from config import OWNER_ID, BROADCAST_DELAY, MSG_DELETE_AFTER, IDLE_NUDGE_AFTER
 from game import (
     sessions, GameSession, get_level, MAX_ROUNDS,
@@ -177,47 +177,68 @@ async def _end_round(chat_id, session, ctx, from_timer=False):
 
 async def _auto_next_round(chat_id: int, next_round: int, theme_key: str, ctx):
     """
-    Send a countdown message (10 → 1) then auto-launch the next round.
-    The countdown is edited in-place so it doesn't spam the chat.
+    Send an animated digital-clock GIF countdown (10→1) as a single
+    Telegram animation message, then auto-launch the next round.
+    The GIF itself animates — no message editing needed.
     """
-    COUNTDOWN = 10
-    try:
-        countdown_msg = await ctx.bot.send_message(
-            chat_id,
-            f"🚀 <b>Round {next_round} starts in {COUNTDOWN}s…</b>",
-            parse_mode=ParseMode.HTML,
-        )
-    except TelegramError:
-        return
+    theme_emoji = THEMES.get(theme_key, {}).get("emoji", "🎮")
+    theme_name  = THEMES.get(theme_key, {}).get("name", "")
 
-    for remaining in range(COUNTDOWN - 1, 0, -1):
-        await asyncio.sleep(1)
-        # Give up if someone started a new game manually in the meantime
-        if sessions.active(chat_id):
-            try:
-                await ctx.bot.delete_message(chat_id, countdown_msg.message_id)
-            except TelegramError:
-                pass
-            return
-        bar_filled = COUNTDOWN - remaining
-        bar = "▓" * bar_filled + "░" * remaining
+    loop = asyncio.get_event_loop()
+    try:
+        gif_bytes = await loop.run_in_executor(None, build_countdown_gif)
+    except Exception as e:
+        log.error(f"build_countdown_gif failed: {e}")
+        gif_bytes = None
+
+    countdown_msg = None
+    if gif_bytes:
         try:
-            await ctx.bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=countdown_msg.message_id,
-                text=f"🚀 <b>Round {next_round} starts in {remaining}s…</b>\n<code>[{bar}]</code>",
+            countdown_msg = await ctx.bot.send_animation(
+                chat_id,
+                animation=io.BytesIO(gif_bytes),
+                caption=f"🎮 <b>Round {next_round}</b>  ·  {theme_emoji} {theme_name}\n<i>Next round starting…</i>",
+                parse_mode=ParseMode.HTML,
+                width=400,
+                height=160,
+            )
+        except TelegramError as e:
+            log.warning(f"send_animation failed: {e}")
+            countdown_msg = None
+
+    # If GIF failed, fall back to a plain text countdown
+    if not countdown_msg:
+        try:
+            countdown_msg = await ctx.bot.send_message(
+                chat_id,
+                f"⏱ <b>Round {next_round}</b> starts in <b>10s</b>…",
                 parse_mode=ParseMode.HTML,
             )
         except TelegramError:
             pass
 
-    await asyncio.sleep(1)
+    # Wait for the GIF to finish playing (10 s × 1 s/frame)
+    await asyncio.sleep(10)
 
-    # Delete countdown message before launching
-    try:
-        await ctx.bot.delete_message(chat_id, countdown_msg.message_id)
-    except TelegramError:
-        pass
+    # Abort if a game started manually during the countdown
+    if sessions.active(chat_id):
+        if countdown_msg:
+            try:
+                await ctx.bot.delete_message(chat_id, countdown_msg.message_id)
+            except TelegramError:
+                pass
+        return
+
+    if countdown_msg:
+        try:
+            await ctx.bot.delete_message(chat_id, countdown_msg.message_id)
+        except TelegramError:
+            pass
+
+    if sessions.active(chat_id) or sessions.cooldown(chat_id):
+        return
+
+    await _launch(chat_id, theme_key, round_num=next_round, ctx=ctx)
 
     # Final guard: don't start if something else took over
     if sessions.active(chat_id) or sessions.cooldown(chat_id):
