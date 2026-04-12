@@ -39,6 +39,10 @@ log = logging.getLogger(__name__)
 # Stores (next_round, theme_key) after a completed round, cleared on new game
 _pending_next: dict[int, tuple] = {}
 
+# ── Per-chat end-round lock — prevents double "round over" messages ─
+# when two players find the last word at the exact same instant.
+_ending_round: set[int] = set()
+
 
 # ── Helpers ───────────────────────────────────────────────────────
 
@@ -100,55 +104,126 @@ def _build_hint_text(session) -> str:
 # ── Core round logic ──────────────────────────────────────────────
 
 async def _end_round(chat_id, session, ctx, from_timer=False):
-    session.active = False
-    summary        = session.summary()
-    missed         = [w for w in session.words if w not in session.found_words]
-    is_final       = session.round_num >= MAX_ROUNDS
-    round_complete = session.complete()
-
-    for row in summary:
-        await db.add_score(chat_id, row["user_id"], row["name"], row["score"], row["words"])
-
-    next_theme = (
-        pick_next_round_theme(chat_id, session.theme, THEME_LIST)
-        if not is_final else session.theme
-    )
-    next_round_num = session.round_num + 1
-
-    text = round_end(
-        summary, missed, THEMES[session.theme]["name"],
-        session.round_num, MAX_ROUNDS,
-        round_complete=round_complete,
-    )
-
-    if is_final:
-        kb = final_round_kb()
-        _pending_next.pop(chat_id, None)
-    elif round_complete:
-        kb = next_round_kb(next_round_num, next_theme)
-        _pending_next[chat_id] = (next_round_num, next_theme)
-    else:
-        kb = round_over_no_next_kb()
-        _pending_next.pop(chat_id, None)
-
-    all_msg_ids = []
-    if session.grid_msg_id:
-        all_msg_ids.append(session.grid_msg_id)
-    all_msg_ids.extend(session.msg_ids)
+    # ── Race-condition guard: only one coroutine may end this round ──
+    if chat_id in _ending_round:
+        return
+    _ending_round.add(chat_id)
 
     try:
-        await ctx.bot.send_message(chat_id, text, parse_mode=ParseMode.HTML, reply_markup=kb)
+        if not session.active:
+            return
+        session.active = False
+
+        summary        = session.summary()
+        missed         = [w for w in session.words if w not in session.found_words]
+        is_final       = session.round_num >= MAX_ROUNDS
+        round_complete = session.complete()
+
+        for row in summary:
+            await db.add_score(chat_id, row["user_id"], row["name"], row["score"], row["words"])
+
+        next_theme     = (
+            pick_next_round_theme(chat_id, session.theme, THEME_LIST)
+            if not is_final else session.theme
+        )
+        next_round_num = session.round_num + 1
+
+        text = round_end(
+            summary, missed, THEMES[session.theme]["name"],
+            session.round_num, MAX_ROUNDS,
+            round_complete=round_complete,
+        )
+
+        # ── Choose keyboard ──────────────────────────────────────────
+        # Auto-next-round replaces the manual "▶️ Start Round N" button,
+        # so we only show leaderboard / add-me buttons now.
+        if is_final:
+            kb = final_round_kb()
+            _pending_next.pop(chat_id, None)
+        else:
+            kb = round_over_no_next_kb()
+            if round_complete:
+                _pending_next[chat_id] = (next_round_num, next_theme)
+            else:
+                _pending_next.pop(chat_id, None)
+
+        all_msg_ids = []
+        if session.grid_msg_id:
+            all_msg_ids.append(session.grid_msg_id)
+        all_msg_ids.extend(session.msg_ids)
+
+        try:
+            await ctx.bot.send_message(chat_id, text, parse_mode=ParseMode.HTML, reply_markup=kb)
+        except TelegramError:
+            pass
+
+        touch_activity(chat_id)
+        sessions.remove(chat_id)
+        sessions.set_cooldown(chat_id, secs=10)
+
+        if all_msg_ids and MSG_DELETE_AFTER > 0:
+            asyncio.create_task(
+                _delete_messages_later(ctx.bot, chat_id, all_msg_ids, MSG_DELETE_AFTER)
+            )
+
+        # ── Auto-start next round after 10-second countdown ──────────
+        if round_complete and not is_final:
+            asyncio.create_task(
+                _auto_next_round(chat_id, next_round_num, next_theme, ctx)
+            )
+    finally:
+        _ending_round.discard(chat_id)
+
+
+async def _auto_next_round(chat_id: int, next_round: int, theme_key: str, ctx):
+    """
+    Send a countdown message (10 → 1) then auto-launch the next round.
+    The countdown is edited in-place so it doesn't spam the chat.
+    """
+    COUNTDOWN = 10
+    try:
+        countdown_msg = await ctx.bot.send_message(
+            chat_id,
+            f"🚀 <b>Round {next_round} starts in {COUNTDOWN}s…</b>",
+            parse_mode=ParseMode.HTML,
+        )
+    except TelegramError:
+        return
+
+    for remaining in range(COUNTDOWN - 1, 0, -1):
+        await asyncio.sleep(1)
+        # Give up if someone started a new game manually in the meantime
+        if sessions.active(chat_id):
+            try:
+                await ctx.bot.delete_message(chat_id, countdown_msg.message_id)
+            except TelegramError:
+                pass
+            return
+        bar_filled = COUNTDOWN - remaining
+        bar = "▓" * bar_filled + "░" * remaining
+        try:
+            await ctx.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=countdown_msg.message_id,
+                text=f"🚀 <b>Round {next_round} starts in {remaining}s…</b>\n<code>[{bar}]</code>",
+                parse_mode=ParseMode.HTML,
+            )
+        except TelegramError:
+            pass
+
+    await asyncio.sleep(1)
+
+    # Delete countdown message before launching
+    try:
+        await ctx.bot.delete_message(chat_id, countdown_msg.message_id)
     except TelegramError:
         pass
 
-    touch_activity(chat_id)
-    sessions.remove(chat_id)
-    sessions.set_cooldown(chat_id, secs=10)
+    # Final guard: don't start if something else took over
+    if sessions.active(chat_id) or sessions.cooldown(chat_id):
+        return
 
-    if all_msg_ids and MSG_DELETE_AFTER > 0:
-        asyncio.create_task(
-            _delete_messages_later(ctx.bot, chat_id, all_msg_ids, MSG_DELETE_AFTER)
-        )
+    await _launch(chat_id, theme_key, round_num=next_round, ctx=ctx)
 
 
 async def _timer_task(chat_id, session, ctx):
@@ -178,8 +253,37 @@ async def _launch(chat_id, theme_key, round_num, ctx):
     t = THEMES[theme_key]
 
     loop = asyncio.get_event_loop()
-    grid, words, placed = await loop.run_in_executor(None, build_puzzle, theme_key, grid_size, n_words)
-    img = await loop.run_in_executor(None, render_image, theme_key, grid, placed, [], round_num, grid_size)
+    try:
+        grid, words, placed = await loop.run_in_executor(
+            None, build_puzzle, theme_key, grid_size, n_words
+        )
+    except Exception as e:
+        log.error(f"_launch build_puzzle failed chat={chat_id} theme={theme_key}: {e}")
+        try:
+            await ctx.bot.send_message(
+                chat_id,
+                "⚠️ Couldn't generate puzzle. Please try /newgame again!",
+                parse_mode=ParseMode.HTML,
+            )
+        except TelegramError:
+            pass
+        return
+
+    try:
+        img = await loop.run_in_executor(
+            None, render_image, theme_key, grid, placed, [], round_num, grid_size
+        )
+    except Exception as e:
+        log.error(f"_launch render_image failed chat={chat_id}: {e}")
+        try:
+            await ctx.bot.send_message(
+                chat_id,
+                "⚠️ Couldn't render grid image. Please try /newgame again!",
+                parse_mode=ParseMode.HTML,
+            )
+        except TelegramError:
+            pass
+        return
 
     session = GameSession(chat_id, theme_key, grid, words, placed, round_num, img)
     sessions.put(session)
@@ -492,6 +596,7 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if session.complete():
             if session._task:
                 session._task.cancel()
+            # _end_round has its own lock so double-triggers are safe
             await _end_round(chat.id, session, ctx)
 
     elif session.already_found(word):
@@ -783,8 +888,18 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 # ── Global error handler ──────────────────────────────────────────
 async def error_handler(update: object, ctx: ContextTypes.DEFAULT_TYPE):
-    """Catches ALL unhandled exceptions — logs them instead of silently dropping."""
-    log.error("Unhandled exception:", exc_info=ctx.error)
+    """Catches ALL unhandled exceptions — logs them, notifies user only for real errors."""
+    err = ctx.error
+
+    # Silently ignore common non-critical Telegram API errors
+    if isinstance(err, (Forbidden, BadRequest)):
+        log.warning(f"Ignored TelegramError: {err}")
+        return
+    if isinstance(err, TelegramError):
+        log.warning(f"TelegramError (non-critical): {err}")
+        return
+
+    log.error("Unhandled exception:", exc_info=err)
     if isinstance(update, Update) and update.effective_message:
         try:
             await update.effective_message.reply_text(
