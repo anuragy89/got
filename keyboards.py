@@ -122,10 +122,10 @@ def word_found_kb(grid_msg_id: int,
     link = _grid_url(grid_msg_id, chat_username, chat_id_int)
     if link:
         return InlineKeyboardMarkup([[
-            _url("🔠 Go to Grid ➡️", link, style="primary"),
+            _url("🔠 Go to Grid ➡️", link, style="success"),
         ]])
     return InlineKeyboardMarkup([[
-        _cb("🔠 Go to Grid ➡️", f"cb:gotogrid:{grid_msg_id}", style="primary"),
+        _cb("🔠 Go to Grid ➡️", f"cb:gotogrid:{grid_msg_id}", style="success"),
     ]])
 
 
