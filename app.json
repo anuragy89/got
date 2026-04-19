@@ -52,38 +52,21 @@
     },
     "USE_PREMIUM_EMOJI": {
       "description": "Set true to use Telegram premium emoji. Requires bot to have premium emoji access.",
-      "value": "false",
+      "value": "True",
       "required": false
     },
     "ROUND_DURATION": {
       "description": "Seconds per game round",
       "value": "90",
       "required": false
-    },
-    "GRID_SIZE": {
-      "description": "Grid size N (NxN grid)",
-      "value": "10",
-      "required": false
+    
     },
     "WORDS_PER_ROUND": {
       "description": "Number of hidden words per round",
       "value": "8",
       "required": false
-    },
-    "COOLDOWN_SECONDS": {
-      "description": "Cooldown between rounds in a group",
-      "value": "30",
-      "required": false
-    },
-    "POINTS_PER_LETTER": {
-      "description": "Base points per letter of found word",
-      "value": "10",
-      "required": false
-    },
-    "FIRST_FINDER_BONUS": {
-      "description": "Bonus points for finding the very first word in a round",
-      "value": "25",
-      "required": false
+  
+   
     },
     "BROADCAST_DELAY": {
       "description": "Seconds to wait between broadcast messages (avoid Telegram flood)",
