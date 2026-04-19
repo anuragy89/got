@@ -218,7 +218,7 @@ def pick_hard_words(chat_id: int, theme_key: str, all_words: list,
 #  Per-chat history stored in a deque of size 19.
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 _theme_history: Dict[int, collections.deque] = {}
-_THEME_COOLOFF = 39   # keep last 39 so all 40 themes play before repeat
+_THEME_COOLOFF = 59   # keep last 59 so all 60 themes play before repeat
 
 
 def pick_random_theme(chat_id: int, theme_list: list) -> str:
