@@ -9,6 +9,7 @@ from telegram.error import TelegramError, Forbidden, BadRequest
 from telegram.ext import ContextTypes
 
 from countdown_gif import build_countdown_gif
+from render_cards import render_leaderboard, render_rank_tiers
 import database as db
 from config import OWNER_ID, BROADCAST_DELAY, MSG_DELETE_AFTER, IDLE_NUDGE_AFTER
 from game import (
@@ -629,26 +630,57 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_leaderboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
+    loop = asyncio.get_event_loop()
     if chat.type == ChatType.PRIVATE:
-        rows, title = await db.global_leaderboard(), "🌍 Global Leaderboard"
-        await update.message.reply_text(
-            leaderboard_text(rows, title), parse_mode=ParseMode.HTML, reply_markup=leaderboard_kb()
-        )
+        rows  = await db.global_leaderboard()
+        title = "Global Leaderboard"
+        kb    = leaderboard_kb()
     else:
-        rows, title = await db.group_leaderboard(chat.id), f"🏆 {chat.title}"
+        rows    = await db.group_leaderboard(chat.id)
+        title   = chat.title or "Group Leaderboard"
         pending = _pending_next.get(chat.id)
         nr, tk  = pending if pending else (0, "")
-        await update.message.reply_text(
-            leaderboard_text(rows, title), parse_mode=ParseMode.HTML,
-            reply_markup=leaderboard_kb(next_round=nr, theme_key=tk),
-        )
+        kb      = leaderboard_kb(next_round=nr, theme_key=tk)
+
+    if rows:
+        try:
+            img = await loop.run_in_executor(None, render_leaderboard, rows, title)
+            await update.message.reply_photo(
+                photo=io.BytesIO(img), reply_markup=kb
+            )
+            return
+        except Exception as e:
+            log.warning(f"render_leaderboard failed: {e}")
+
+    # Fallback to text if image render fails
+    text_title = f"🌍 {title}" if chat.type == ChatType.PRIVATE else f"🏆 {title}"
+    await update.message.reply_text(
+        leaderboard_text(rows, text_title), parse_mode=ParseMode.HTML, reply_markup=kb
+    )
 
 
 async def cmd_globalboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    rows = await db.global_leaderboard()
+    chat    = update.effective_chat
+    rows    = await db.global_leaderboard()
+    pending = _pending_next.get(chat.id)
+    nr, tk  = pending if pending else (0, "")
+    kb      = globalboard_kb(next_round=nr, theme_key=tk)
+    loop    = asyncio.get_event_loop()
+
+    if rows:
+        try:
+            img = await loop.run_in_executor(None, render_leaderboard, rows, "Global Leaderboard")
+            await update.message.reply_photo(
+                photo=io.BytesIO(img), reply_markup=kb
+            )
+            return
+        except Exception as e:
+            log.warning(f"render_leaderboard failed: {e}")
+
+    # Fallback to text if image render fails
     await update.message.reply_text(
         leaderboard_text(rows, "🌍 Global Leaderboard"),
-        parse_mode=ParseMode.HTML, reply_markup=leaderboard_kb(),
+        parse_mode=ParseMode.HTML, reply_markup=kb,
     )
 
 
@@ -763,27 +795,55 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _safe_edit_text(q, help_text(), reply_markup=back_kb())
 
     elif data == "cb:leaderboard":
+        loop = asyncio.get_event_loop()
         if chat.type == ChatType.PRIVATE:
-            rows, title = await db.global_leaderboard(), "🌍 Global Leaderboard"
-            await _safe_edit_text(q, leaderboard_text(rows, title), reply_markup=leaderboard_kb())
+            rows  = await db.global_leaderboard()
+            title = "Global Leaderboard"
+            kb    = leaderboard_kb()
         else:
-            rows, title = await db.group_leaderboard(chat.id), f"🏆 {chat.title}"
+            rows    = await db.group_leaderboard(chat.id)
+            title   = chat.title or "Group Leaderboard"
             pending = _pending_next.get(chat.id)
             nr, tk  = pending if pending else (0, "")
-            await _safe_edit_text(
-                q, leaderboard_text(rows, title),
-                reply_markup=leaderboard_kb(next_round=nr, theme_key=tk),
-            )
+            kb      = leaderboard_kb(next_round=nr, theme_key=tk)
+
+        if rows:
+            try:
+                img = await loop.run_in_executor(None, render_leaderboard, rows, title)
+                try:
+                    await q.delete_message()
+                except TelegramError:
+                    pass
+                await chat.send_photo(photo=io.BytesIO(img), reply_markup=kb)
+                return
+            except Exception as e:
+                log.warning(f"cb:leaderboard render failed: {e}")
+
+        text_title = f"🌍 {title}" if chat.type == ChatType.PRIVATE else f"🏆 {title}"
+        await _safe_edit_text(q, leaderboard_text(rows, text_title), reply_markup=kb)
 
     elif data == "cb:globalboard":
-        rows = await db.global_leaderboard()
-        # FIX #1 — read _pending_next so the ▶️ Next Round button is preserved
-        # when the user navigates to Global Board from a completed-round card.
+        loop    = asyncio.get_event_loop()
+        rows    = await db.global_leaderboard()
         pending = _pending_next.get(chat.id)
         nr, tk  = pending if pending else (0, "")
+        kb      = globalboard_kb(next_round=nr, theme_key=tk)
+
+        if rows:
+            try:
+                img = await loop.run_in_executor(None, render_leaderboard, rows, "Global Leaderboard")
+                try:
+                    await q.delete_message()
+                except TelegramError:
+                    pass
+                await chat.send_photo(photo=io.BytesIO(img), reply_markup=kb)
+                return
+            except Exception as e:
+                log.warning(f"cb:globalboard render failed: {e}")
+
         await _safe_edit_text(
             q, leaderboard_text(rows, "🌍 Global Leaderboard"),
-            reply_markup=globalboard_kb(next_round=nr, theme_key=tk),
+            reply_markup=kb,
         )
 
     elif data == "cb:timeleft":
