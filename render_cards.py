@@ -257,21 +257,3 @@ def render_leaderboard(rows:list, title:str="Global Leaderboard") -> bytes:
     out.save(buf,"PNG",optimize=True,compress_level=6)
     buf.seek(0)
     return buf.read()
-
-
-sample=[
-    {"name":"Shayyy",      "score":8610,  "words_found":1722},
-    {"name":"Ria Rathore", "score":4355,  "words_found":871},
-    {"name":"Depreciated", "score":4230,  "words_found":846},
-    {"name":"Reiko",       "score":3750,  "words_found":750},
-    {"name":"Cornetto",    "score":3045,  "words_found":609},
-    {"name":"ANURAG",      "score":2335,  "words_found":467},
-    {"name":"VORTEX",      "score":2205,  "words_found":441},
-    {"name":"Rudra",       "score":1380,  "words_found":276},
-    {"name":"Advik",       "score":900,   "words_found":180},
-    {"name":"Reiko2",      "score":575,   "words_found":115},
-]
-
-with open("/home/claude/lb_light.png","wb") as f: f.write(render_leaderboard(sample,"Global Leaderboard"))
-with open("/home/claude/tiers_light.png","wb") as f: f.write(render_rank_tiers())
-print("done")
