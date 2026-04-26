@@ -679,9 +679,8 @@ async def cmd_mystats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_me(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Send a beautiful profile card image for the user."""
+    """Send a beautiful global profile card image for the user."""
     user = update.effective_user
-    chat = update.effective_chat
     await db.upsert_user(user)
 
     global_doc = await db.user_global_stats(user.id)
@@ -703,18 +702,6 @@ async def cmd_me(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     rounds_played = global_doc.get("rounds_played", 0)
     streak_days   = global_doc.get("streak_days", 0)
 
-    # Group stats (only if called from a group)
-    in_group     = chat.type in (ChatType.GROUP, ChatType.SUPERGROUP)
-    group_score  = 0; group_rank_pos = 0; group_words = 0; group_rounds_won = 0
-    if in_group:
-        grp_rows   = await db.group_leaderboard(chat.id, limit=200)
-        grp_me     = next((r for r in grp_rows if r.get("user_id") == user.id), None)
-        group_rank_pos = next((i+1 for i,r in enumerate(grp_rows) if r.get("user_id") == user.id), 0)
-        if grp_me:
-            group_score = grp_me.get("score", 0)
-            group_words = grp_me.get("words_found", 0)
-            group_rounds_won = grp_me.get("rounds_won", 0)
-
     # Fetch profile photo
     avatar_bytes = None
     try:
@@ -732,18 +719,17 @@ async def cmd_me(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         user.first_name, user.id,
         words_found, score, global_rank,
         rounds_won, rounds_played, streak_days,
-        group_score, group_rank_pos,
-        chat.title if in_group else "",
-        group_words, group_rounds_won,
+        0, 0, "", 0, 0,
         avatar_bytes,
-        in_group,
+        False,        # show_group = False always
+        -1,           # palette_idx = -1 → random
     )
 
     await update.message.reply_photo(
         photo=io.BytesIO(img),
         caption=f"👤 <b>{user.first_name}'s</b> WordGrid Profile",
         parse_mode=ParseMode.HTML,
-        reply_markup=me_kb(in_group=in_group),
+        reply_markup=me_kb(),
     )
 
 
@@ -874,54 +860,6 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     elif data == "cb:help":
         await _safe_edit_text(q, help_text(), reply_markup=back_kb())
-
-    elif data == "cb:me_group":
-        # Show group-specific profile card
-        user = update.effective_user
-        if chat.type not in (ChatType.GROUP, ChatType.SUPERGROUP):
-            await q.answer("This only works in groups!", show_alert=True)
-            return
-        global_doc = await db.user_global_stats(user.id)
-        if not global_doc:
-            await q.answer("No stats yet — play first!", show_alert=True)
-            return
-        all_rows    = await db.global_leaderboard(limit=500)
-        global_rank = next((i+1 for i,r in enumerate(all_rows) if r.get("user_id") == user.id), len(all_rows)+1)
-        grp_rows    = await db.group_leaderboard(chat.id, limit=200)
-        grp_me      = next((r for r in grp_rows if r.get("user_id") == user.id), {})
-        group_rank_pos = next((i+1 for i,r in enumerate(grp_rows) if r.get("user_id") == user.id), 0)
-        avatar_bytes = None
-        try:
-            photos = await ctx.bot.get_user_profile_photos(user.id, limit=1)
-            if photos.photos:
-                file = await ctx.bot.get_file(photos.photos[0][-1].file_id)
-                buf  = io.BytesIO()
-                await file.download_to_memory(buf)
-                avatar_bytes = buf.getvalue()
-        except Exception:
-            pass
-        loop = asyncio.get_event_loop()
-        img  = await loop.run_in_executor(None, render_me_card,
-            user.first_name, user.id,
-            global_doc.get("words_found", 0), global_doc.get("score", 0), global_rank,
-            global_doc.get("rounds_won", 0), global_doc.get("rounds_played", 0),
-            global_doc.get("streak_days", 0),
-            grp_me.get("score", 0), group_rank_pos,
-            chat.title or "",
-            grp_me.get("words_found", 0), grp_me.get("rounds_won", 0),
-            avatar_bytes, True,
-        )
-        await q.answer()
-        try:
-            await q.delete_message()
-        except TelegramError:
-            pass
-        await ctx.bot.send_photo(
-            chat.id, photo=io.BytesIO(img),
-            caption=f"👤 <b>{user.first_name}'s</b> Chat Profile — {chat.title}",
-            parse_mode=ParseMode.HTML,
-            reply_markup=me_kb(in_group=True),
-        )
 
     elif data == "cb:leaderboard":
         if chat.type == ChatType.PRIVATE:
