@@ -78,6 +78,7 @@ def help_text() -> str:
         f"  /leaderboard — This group's top 10\n"
         f"  /globalboard — All-time global top 10\n"
         f"  /mystats — Your personal stats\n"
+        f"  /me — Your beautiful profile card\n"
         f"  /resetboard — Reset group board (admins)\n\n"
         f"{ICO_FIRE()} <b>20 Themes</b>\n"
         f"  animals • fruits • ocean • space • sports\n"
