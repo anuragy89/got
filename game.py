@@ -24,10 +24,10 @@ HARD_FIRST_PTS        = 25    # pts for first find in hard mode (max)
 #  round_num → (duration_secs, words_to_find, grid_size)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ROUND_LEVELS = {
-    1:  (120,  6,  7),
-    2:  (130,  6,  7),
-    3:  (150,  7,  8),
-    4:  (170, 7,  8),
+    1:  (120,  4,  5),
+    2:  (130,  6,  6),
+    3:  (150,  7,  7),
+    4:  (170, 7,  7),
     5:  (190, 7,  8),
     6:  (210, 8,  8),
     7:  (250, 9,  8),
@@ -134,10 +134,10 @@ class GameSession:
 
     def get_hint(self, word: str) -> str:
         if len(word) <= 2:
-            return word[0] + "_" * (len(word) - 1)
+            return word[0] + " _" * (len(word) - 1)
         if len(word) == 3:
-            return word[0] + "_" + word[-1]
-        return word[0] + "_" * (len(word) - 2) + word[-1]
+            return word[0] + " _ " + word[-1]
+        return word[0] + " _" * (len(word) - 2) + " " + word[-1]
 
 
 class SessionManager:
