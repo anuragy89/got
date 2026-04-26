@@ -268,14 +268,8 @@ def back_kb() -> InlineKeyboardMarkup:
 
 
 def me_kb(in_group: bool = False) -> InlineKeyboardMarkup:
-    """Buttons under the /me profile card."""
-    rows = []
-    if in_group:
-        rows.append([
-            _cb("📍 My Chat Ranking", "cb:me_group", style="primary"),
-        ])
-    rows.append([
-        _cb("🌍 Global Board", "cb:globalboard"),
-        _cb("🎮 Play Now",     "theme:random", style="success"),
-    ])
-    return InlineKeyboardMarkup(rows)
+    """Button under the /me profile card — single Help button that opens bot DM."""
+    from config import BOT_USERNAME
+    return InlineKeyboardMarkup([[
+        _url("❓ Help & Commands", f"https://t.me/{BOT_USERNAME}?start=help", style="primary"),
+    ]])
