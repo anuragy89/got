@@ -118,7 +118,7 @@ def game_start_caption(theme_name, theme_emoji, round_num, n_words, duration, gr
                 elif len(w) == 3:
                     masked = w[0] + "_" + w[-1]
                 else:
-                    masked = w[0] + "___" * (len(w) - 2) + w[-1]
+                    masked = w[0] + "_" * (len(w) - 2) + w[-1]
                 hint_lines.append(f"💡 <code>{masked}</code>  <i>({len(w)})</i>")
         return header + "\n".join(hint_lines)
 
