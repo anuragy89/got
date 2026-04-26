@@ -89,15 +89,16 @@ def round_mode_kb(game_type: str = "normal") -> InlineKeyboardMarkup:
     ])
 
 
-
+def start_kb() -> InlineKeyboardMarkup:
+    """Buttons shown under the /start message in private chat."""
     return InlineKeyboardMarkup([
         [_url("➕ Add to Group", BOT_INVITE_LINK, style="success")],
         [
-            _url("📢 Updates", UPDATES_CHANNEL),      # external link — no colour
-            _url("🆘 Support", SUPPORT_GROUP),         # external link — no colour
+            _url("📢 Updates", UPDATES_CHANNEL),
+            _url("🆘 Support", SUPPORT_GROUP),
         ],
         [
-            _cb("❓ Help",         "cb:help"),          # neutral — no colour
+            _cb("❓ Help",         "cb:help"),
             _cb("🏆 Global Board", "cb:globalboard"),
         ],
     ])
