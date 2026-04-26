@@ -345,15 +345,24 @@ def render_me_card(
     group_rounds_won: int  = 0,
     avatar_bytes: bytes    = None,
     show_group: bool       = False,
+    palette_idx: int       = -1,
 ) -> bytes:
+    # palette_idx = -1 means random each call
+    import random as _random
     S = 2
     W = 700
     PAD = 26
 
-    # ── Palette ──────────────────────────────────────────────────
-    pal_idx = user_id % len(USER_PALETTES)
+    # ── Palette — random every call for variety ───────────────────
+    if palette_idx < 0:
+        pal_idx = _random.randint(0, len(USER_PALETTES) - 1)
+    else:
+        pal_idx = palette_idx % len(USER_PALETTES)
     CARD_BG, ACCENT, NAME_C, SUB_C, STAT_BG, STAT_BD = USER_PALETTES[pal_idx]
-    ACCENT_LIGHT = tuple(min(255, int(c * 1.35)) for c in ACCENT)
+    # Boost NAME_C and SUB_C contrast so text is always readable on dark bg
+    NAME_C = tuple(min(255, max(210, c)) for c in NAME_C)
+    SUB_C  = tuple(min(255, max(170, c)) for c in SUB_C)
+    ACCENT_LIGHT = tuple(min(255, int(c * 1.4 + 20)) for c in ACCENT)
 
     # ── Tier ─────────────────────────────────────────────────────
     tier_tag, tier_hex, tier_bg_hex, tier_glow_hex, next_label = _get_me_tier(words_found)
@@ -373,15 +382,9 @@ def render_me_card(
     f_init  = font(FONT_BOLD, 28*S)
     f_streak= font(FONT_BOLD, 15*S)
 
-    # ── Height calc ───────────────────────────────────────────────
-    # Top section: avatar + name + rank row + xp bar = ~200px
-    # Stats row: 80px
-    # Tier path: 60px
-    # Streak bar: 60px
-    # Group section (optional): 140px
+    # ── Height calc (global profile only — no group section) ─────
     MAIN_H = 530
-    GRPX_H = 150 if show_group else 0
-    H = MAIN_H + GRPX_H
+    H = MAIN_H
     W2, H2 = W*S, H*S
 
     base = Image.new("RGB", (W2, H2), CARD_BG)
@@ -589,42 +592,6 @@ def render_me_card(
             draw.ellipse([dx, dy, dx+dot_r*2, dy+dot_r*2], fill=(40,20,5), outline=(80,40,10), width=1)
         dw2 = int(draw.textlength(day, font=f_xp))
         draw.text((dx + dot_r - dw2//2, dy + 10*S), day, fill=(255,255,255) if di < played_days else (60,35,10), font=f_xp)
-
-    # ── Group section ─────────────────────────────────────────────
-    if show_group and group_name:
-        GRP_Y = MAIN_H*S
-        draw.line([(0, GRP_Y), (W2, GRP_Y)], fill=STAT_BD, width=2)
-        draw.rectangle([0, GRP_Y, W2, H2], fill=tuple(max(0, c-6) for c in CARD_BG))
-
-        # Header
-        grp_hdr = f"📍 {group_name[:28]}"
-        draw.text((PAD*S, GRP_Y + 14*S), grp_hdr, fill=NAME_C, font=f_streak)
-        grp_sub = f"Your rank in this chat"
-        draw.text((PAD*S, GRP_Y + 36*S), grp_sub, fill=SUB_C, font=f_xp)
-
-        # Group rank pill
-        gr_txt = f"#{group_rank} in group"
-        grw    = int(draw.textlength(gr_txt, font=f_sub)) + 20*S
-        rr(draw, W2 - PAD*S - grw, GRP_Y + 14*S, grw, 24*S, 12*S,
-           fill=STAT_BG, outline=ACCENT, width=2)
-        draw.text((W2 - PAD*S - grw + 10*S, GRP_Y + 18*S), gr_txt, fill=ACCENT_LIGHT, font=f_sub)
-
-        # Group stat boxes (3 mini boxes)
-        grp_stats = [
-            (f"{group_score:,}", "group pts"),
-            (f"{group_words:,}", "words here"),
-            (f"{group_rounds_won}", "rounds won"),
-        ]
-        GSB_W = (W2 - PAD*S*2 - 12*S*2) // 3
-        GSB_H = 52*S
-        GST_Y = GRP_Y + 68*S
-        for i, (val, lbl) in enumerate(grp_stats):
-            gsx = PAD*S + i*(GSB_W + 12*S)
-            rr(draw, gsx, GST_Y, GSB_W, GSB_H, 8*S, fill=STAT_BG, outline=STAT_BD, width=1)
-            vw3 = int(draw.textlength(val, font=f_streak))
-            draw.text((gsx + GSB_W//2 - vw3//2, GST_Y + 8*S), val, fill=NAME_C, font=f_streak)
-            lw3 = int(draw.textlength(lbl, font=f_slbl))
-            draw.text((gsx + GSB_W//2 - lw3//2, GST_Y + 30*S), lbl, fill=SUB_C, font=f_slbl)
 
     # ── Footer watermark ─────────────────────────────────────────
     FTR_Y = H2 - 22*S
