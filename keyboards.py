@@ -1,6 +1,25 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from config import BOT_INVITE_LINK, SUPPORT_GROUP, UPDATES_CHANNEL
+from config import BOT_INVITE_LINK, SUPPORT_GROUP, UPDATES_CHANNEL, USE_PREMIUM_EMOJI, \
+    PEMOJI_ROCKET, PEMOJI_LIGHTNING, PEMOJI_JOYSTICK, PEMOJI_FIRE, PEMOJI_TROPHY, PEMOJI_STAR
 from puzzle import THEMES, THEME_LIST
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  PREMIUM EMOJI HELPER (for buttons)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def _pe(eid, fallback):
+    if USE_PREMIUM_EMOJI:
+        return f'<tg-emoji emoji-id="{eid}">{fallback}</tg-emoji>'
+    return fallback
+
+
+def _BTN_AUTO():      return _pe(PEMOJI_ROCKET,    "🚀")
+def _BTN_MANUAL():    return _pe(PEMOJI_JOYSTICK,  "🕹️")
+def _BTN_NEXT():      return _pe(PEMOJI_LIGHTNING, "⚡")
+def _BTN_TROPHY():    return _pe(PEMOJI_TROPHY,    "🏆")
+def _BTN_FIRE():      return _pe(PEMOJI_FIRE,      "🔥")
+def _BTN_STAR():      return _pe(PEMOJI_STAR,      "⭐")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -56,7 +75,21 @@ def _grid_url(grid_msg_id: int,
 #  KEYBOARDS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def start_kb() -> InlineKeyboardMarkup:
+def round_mode_kb(game_type: str = "normal") -> InlineKeyboardMarkup:
+    """
+    Ask user to pick Automatic or Manual round progression.
+    game_type: "normal" or "hard"
+    """
+    prefix = f"startmode:{game_type}"
+    return InlineKeyboardMarkup([
+        [
+            _cb(f"{_BTN_AUTO()} Automatic", f"{prefix}:auto",   style="success"),
+            _cb(f"{_BTN_MANUAL()} Manual",  f"{prefix}:manual", style="primary"),
+        ],
+    ])
+
+
+
     return InlineKeyboardMarkup([
         [_url("➕ Add to Group", BOT_INVITE_LINK, style="success")],
         [
@@ -129,15 +162,16 @@ def word_found_kb(grid_msg_id: int,
     ]])
 
 
-def next_round_kb(next_round: int, theme_key: str) -> InlineKeyboardMarkup:
-    """After a round where ALL words found — includes Next Round button."""
+def next_round_kb(next_round: int, theme_key: str, is_hard: bool = False) -> InlineKeyboardMarkup:
+    """After a round where ALL words found — manual mode: includes Next Round button."""
+    mode = "hard" if is_hard else "normal"
     return InlineKeyboardMarkup([
         [
-            _cb(f"▶️ Start Round {next_round}",
-                f"nextround:{theme_key}:{next_round}", style="danger"),
+            _cb(f"{_BTN_NEXT()} Start Round {next_round}",
+                f"nextround:{theme_key}:{next_round}:{mode}", style="danger"),
         ],
         [
-            _cb("🏆 Leaderboard", "cb:leaderboard", style="primary"),
+            _cb(f"{_BTN_TROPHY()} Leaderboard", "cb:leaderboard", style="primary"),
             _url("➕ Add Me",      BOT_INVITE_LINK,  style="success"),
         ],
     ])
@@ -167,52 +201,57 @@ def final_round_kb() -> InlineKeyboardMarkup:
     ])
 
 
-def leaderboard_kb(next_round: int = 0, theme_key: str = "") -> InlineKeyboardMarkup:
+def leaderboard_kb(next_round: int = 0, theme_key: str = "", is_hard: bool = False) -> InlineKeyboardMarkup:
     """
-    Group leaderboard view.
-    ▶️ Next Round row is appended when next_round > 0, so the button survives
-    the user tapping Leaderboard from the round-end card.
-    FIX: 🌍 Global Board now has style="primary" (was uncoloured in screenshot).
+    Group leaderboard — matches screenshot layout with Current Chat / Global tabs
+    and Today / Week / All Time filter tabs.
     """
     rows = [
         [
-            _cb("🌍 Global Board", "cb:globalboard", style="primary"),  # ← was missing colour
-            _cb("🔄 Refresh",      "cb:leaderboard", style="primary"),                     # neutral
+            _cb("📍 Current Chat", "cb:leaderboard", style="primary"),
+            _cb("🌍 Global",       "cb:globalboard", style="primary"),
+        ],
+        [
+            _cb("📅 Today",   "lb:today"),
+            _cb("📆 Week",    "lb:week"),
+            _cb("🏆 All Time","lb:alltime", style="success"),
         ],
         [
             _cb("🎮 New Game", "theme:random", style="success"),
-            _cb("❓ Help",     "cb:help",  style="success"),                               # neutral
+            _cb("❓ Help",     "cb:help"),
         ],
     ]
     if next_round > 0 and theme_key:
+        mode = "hard" if is_hard else "normal"
         rows.append([
-            _cb(f"▶️ Start Round {next_round}",
-                f"nextround:{theme_key}:{next_round}", style="success"),
+            _cb(f"{_BTN_NEXT()} Start Round {next_round}",
+                f"nextround:{theme_key}:{next_round}:{mode}", style="success"),
         ])
     return InlineKeyboardMarkup(rows)
 
 
-def globalboard_kb(next_round: int = 0, theme_key: str = "") -> InlineKeyboardMarkup:
-    """
-    FIX #1 — Global leaderboard view with its own keyboard builder.
-    Carries the ▶️ Next Round button through from _pending_next so it is
-    never silently dropped when the user navigates to the Global Board
-    from a completed-round card.
-    """
+def globalboard_kb(next_round: int = 0, theme_key: str = "", is_hard: bool = False) -> InlineKeyboardMarkup:
+    """Global leaderboard view — matches screenshot."""
     rows = [
         [
-            _cb("🏆 Group Board", "cb:leaderboard", style="primary"),
-            _cb("🔄 Refresh",     "cb:globalboard"),                     # neutral
+            _cb("📍 Current Chat", "cb:leaderboard", style="primary"),
+            _cb("🌍 Global ✅",    "cb:globalboard", style="primary"),
+        ],
+        [
+            _cb("📅 Today",   "lb:today"),
+            _cb("📆 Week",    "lb:week"),
+            _cb("🏆 All Time","lb:alltime", style="success"),
         ],
         [
             _cb("🎮 New Game", "theme:random", style="success"),
-            _cb("❓ Help",     "cb:help"),                               # neutral
+            _cb("❓ Help",     "cb:help"),
         ],
     ]
     if next_round > 0 and theme_key:
+        mode = "hard" if is_hard else "normal"
         rows.append([
-            _cb(f"▶️ Start Round {next_round}",
-                f"nextround:{theme_key}:{next_round}", style="danger"),
+            _cb(f"{_BTN_NEXT()} Start Round {next_round}",
+                f"nextround:{theme_key}:{next_round}:{mode}", style="danger"),
         ])
     return InlineKeyboardMarkup(rows)
 
