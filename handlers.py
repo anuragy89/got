@@ -727,7 +727,7 @@ async def cmd_me(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_photo(
         photo=io.BytesIO(img),
-        caption=f"👤 <b>{user.first_name}'s</b> WordGrid Profile",
+        caption=f"👤 <b>{user.first_name}'s</b> WordGrid Card",
         parse_mode=ParseMode.HTML,
         reply_markup=me_kb(),
     )
