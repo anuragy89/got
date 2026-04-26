@@ -1,5 +1,57 @@
-import io, math
+import io, math, unicodedata
 from PIL import Image, ImageDraw, ImageFont
+
+# ── Unicode fancy-text normalizer ─────────────────────────────────
+# Telegram users often set names using Mathematical Alphanumeric
+# Symbols (𝐀-𝐙, 𝚫, etc.) or other decorative Unicode blocks.
+# Pillow fonts don't cover these — map them back to plain ASCII/Greek.
+def _build_math_map() -> dict:
+    m = {}
+    # Mathematical Alphanumeric blocks: bold, italic, bold-italic,
+    # script, fraktur, double-struck, sans-serif, monospace (A-Z, a-z)
+    _BLOCKS_UPPER = [
+        0x1D400, 0x1D434, 0x1D468, 0x1D49C, 0x1D4D0, 0x1D504,
+        0x1D538, 0x1D56C, 0x1D5A0, 0x1D5D4, 0x1D608, 0x1D63C, 0x1D670,
+    ]
+    _BLOCKS_LOWER = [
+        0x1D41A, 0x1D44E, 0x1D482, 0x1D4B6, 0x1D4EA, 0x1D51E,
+        0x1D552, 0x1D586, 0x1D5BA, 0x1D5EE, 0x1D622, 0x1D656, 0x1D68A,
+    ]
+    for base in _BLOCKS_UPPER:
+        for i in range(26):
+            m[chr(base + i)] = chr(ord('A') + i)
+    for base in _BLOCKS_LOWER:
+        for i in range(26):
+            m[chr(base + i)] = chr(ord('a') + i)
+    # Bold / double-struck / sans digits
+    for base in (0x1D7CE, 0x1D7D8, 0x1D7E2, 0x1D7EC, 0x1D7F6):
+        for i in range(10):
+            m[chr(base + i)] = str(i)
+    # Mathematical Bold Greek (covers 𝚫 etc.)
+    _GREEK_BASE = 'ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩαβγδεζηθικλμνξοπρστυφχψω'
+    for block_start in (0x1D6A8, 0x1D6E2, 0x1D71C, 0x1D756, 0x1D790):
+        for i, g in enumerate(_GREEK_BASE):
+            m[chr(block_start + i)] = g
+    # Common circled / fullwidth / superscript letters
+    for i in range(26):
+        m[chr(0x24B6 + i)] = chr(ord('A') + i)   # Ⓐ-Ⓩ
+        m[chr(0x24D0 + i)] = chr(ord('a') + i)   # ⓐ-ⓩ
+        m[chr(0xFF21 + i)] = chr(ord('A') + i)   # Ａ-Ｚ fullwidth
+        m[chr(0xFF41 + i)] = chr(ord('a') + i)   # ａ-ｚ fullwidth
+    for i in range(10):
+        m[chr(0xFF10 + i)] = str(i)               # ０-９ fullwidth
+    return m
+
+_MATH_MAP = _build_math_map()
+
+def normalize_name(text: str) -> str:
+    """
+    Convert fancy Unicode letters (𝐁old, 𝚫elta, ａ-ｚ, etc.) to
+    their plain equivalents so Pillow can render them with any font.
+    Non-mappable characters that aren't covered by installed fonts
+    are left as-is (Arabic, Devanagari, CJK handled separately).
+    """
+    return ''.join(_MATH_MAP.get(ch, ch) for ch in text)
 
 FONT_BOLD = "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"
 FONT_REG  = "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"
@@ -546,7 +598,7 @@ def render_me_card(
 
     if not avatar_bytes:
         draw.ellipse([AX-AR, AY-AR, AX+AR, AY+AR], fill=TIER_BG)
-        ini = (name[:2] if len(name) >= 2 else name[0:1]).upper()
+        ini = normalize_name(name[:2] if len(name) >= 2 else name[0:1]).upper()
         iw  = measure_text_ms(draw, ini, f_init, bold=True)
         draw_text_ms(draw, ini, AX - iw // 2, AY - 18*S, f_init, fill=TIER_C, bold=True)
 
@@ -566,11 +618,11 @@ def render_me_card(
     NX = (85 + 52 + 22) * S   # avatar centre + radius + gap
     NY = (HDR_TOP + 22) * S
 
-    trunc_name = name[:22]
+    trunc_name = normalize_name(name[:22])
     draw_text_ms(draw, trunc_name, NX, NY, f_name, fill=NAME_C, bold=True)
 
     # @username · WordGrid Player
-    sub_line = f"@{name.lower().replace(' ','_')}  ·  WordGrid Player"
+    sub_line = f"@{normalize_name(name).lower().replace(' ','_')}  ·  WordGrid Player"
     draw_text_ms(draw, sub_line, NX, NY + 32*S, f_sub, fill=SUB_C, bold=False)
 
     # Global rank pill  ──  filled dark, blue border
