@@ -21,7 +21,7 @@ from telegram.request import HTTPXRequest
 import database as db
 from config import BOT_TOKEN, IDLE_NUDGE_CHECK
 from handlers import (
-    cmd_hint,
+    cmd_hint, cmd_me,
     cmd_start, cmd_help, cmd_theme, cmd_newgame, cmd_newhard,
     cmd_leaderboard, cmd_globalboard, cmd_mystats,
     cmd_endgame, cmd_resetboard,
@@ -76,6 +76,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("leaderboard", cmd_leaderboard))
     app.add_handler(CommandHandler("globalboard", cmd_globalboard))
     app.add_handler(CommandHandler("mystats",     cmd_mystats))
+    app.add_handler(CommandHandler("me",          cmd_me))
     app.add_handler(CommandHandler("hint",        cmd_hint))
     app.add_handler(CommandHandler("endgame",     cmd_endgame))
     app.add_handler(CommandHandler("skip",        cmd_endgame))
