@@ -114,10 +114,12 @@ def game_start_caption(theme_name, theme_emoji, round_num, n_words, duration, gr
                 hint_lines.append(f"✅ <b>{w}</b>")
             else:
                 if len(w) <= 2:
-                    masked = w[0] + " _" * (len(w) - 1)
+                    masked = w[0] + "_" * (len(w) - 1)
+                elif len(w) == 3:
+                    masked = w[0] + "_" + w[-1]
                 else:
-                    masked = w[0] + " _ " * (len(w) - 2) + w[-1]
-                hint_lines.append(f"💡 <code>{masked}</code>  <i>({len(w)} letters)</i>")
+                    masked = w[0] + "_" * (len(w) - 2) + w[-1]
+                hint_lines.append(f"💡 <code>{masked}</code>  <i>({len(w)})</i>")
         return header + "\n".join(hint_lines)
 
     # Fallback when words not yet available (shouldn't normally happen)

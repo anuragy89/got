@@ -1,6 +1,25 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from config import BOT_INVITE_LINK, SUPPORT_GROUP, UPDATES_CHANNEL
+from config import BOT_INVITE_LINK, SUPPORT_GROUP, UPDATES_CHANNEL, USE_PREMIUM_EMOJI, \
+    PEMOJI_ROCKET, PEMOJI_LIGHTNING, PEMOJI_JOYSTICK, PEMOJI_FIRE, PEMOJI_TROPHY, PEMOJI_STAR
 from puzzle import THEMES, THEME_LIST
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  PREMIUM EMOJI HELPER (for buttons)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def _pe(eid, fallback):
+    if USE_PREMIUM_EMOJI:
+        return f'<tg-emoji emoji-id="{eid}">{fallback}</tg-emoji>'
+    return fallback
+
+
+def _BTN_AUTO():      return "🚀"
+def _BTN_MANUAL():    return "🕹️"
+def _BTN_NEXT():      return "⚡"
+def _BTN_TROPHY():    return "🏆"
+def _BTN_FIRE():      return "🔥"
+def _BTN_STAR():      return "⭐"
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -56,15 +75,30 @@ def _grid_url(grid_msg_id: int,
 #  KEYBOARDS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+def round_mode_kb(game_type: str = "normal") -> InlineKeyboardMarkup:
+    """
+    Ask user to pick Automatic or Manual round progression.
+    game_type: "normal" or "hard"
+    """
+    prefix = f"startmode:{game_type}"
+    return InlineKeyboardMarkup([
+        [
+            _cb(f"{_BTN_AUTO()} Automatic", f"{prefix}:auto",   style="success"),
+            _cb(f"{_BTN_MANUAL()} Manual",  f"{prefix}:manual", style="primary"),
+        ],
+    ])
+
+
 def start_kb() -> InlineKeyboardMarkup:
+    """Buttons shown under the /start message in private chat."""
     return InlineKeyboardMarkup([
         [_url("➕ Add to Group", BOT_INVITE_LINK, style="success")],
         [
-            _url("📢 Updates", UPDATES_CHANNEL),      # external link — no colour
-            _url("🆘 Support", SUPPORT_GROUP),         # external link — no colour
+            _url("📢 Updates", UPDATES_CHANNEL),
+            _url("🆘 Support", SUPPORT_GROUP),
         ],
         [
-            _cb("❓ Help",         "cb:help"),          # neutral — no colour
+            _cb("❓ Help",         "cb:help"),
             _cb("🏆 Global Board", "cb:globalboard"),
         ],
     ])
@@ -129,15 +163,16 @@ def word_found_kb(grid_msg_id: int,
     ]])
 
 
-def next_round_kb(next_round: int, theme_key: str) -> InlineKeyboardMarkup:
-    """After a round where ALL words found — includes Next Round button."""
+def next_round_kb(next_round: int, theme_key: str, is_hard: bool = False) -> InlineKeyboardMarkup:
+    """After a round where ALL words found — manual mode: includes Next Round button."""
+    mode = "hard" if is_hard else "normal"
     return InlineKeyboardMarkup([
         [
-            _cb(f"▶️ Start Round {next_round}",
-                f"nextround:{theme_key}:{next_round}", style="danger"),
+            _cb(f"{_BTN_NEXT()} Start Round {next_round}",
+                f"nextround:{theme_key}:{next_round}:{mode}", style="danger"),
         ],
         [
-            _cb("🏆 Leaderboard", "cb:leaderboard", style="primary"),
+            _cb(f"{_BTN_TROPHY()} Leaderboard", "cb:leaderboard", style="primary"),
             _url("➕ Add Me",      BOT_INVITE_LINK,  style="success"),
         ],
     ])
@@ -167,53 +202,61 @@ def final_round_kb() -> InlineKeyboardMarkup:
     ])
 
 
-def leaderboard_kb(next_round: int = 0, theme_key: str = "") -> InlineKeyboardMarkup:
+def leaderboard_kb(next_round: int = 0, theme_key: str = "", is_hard: bool = False,
+                   time_filter: str = "alltime") -> InlineKeyboardMarkup:
     """
-    Group leaderboard view.
-    ▶️ Next Round row is appended when next_round > 0, so the button survives
-    the user tapping Leaderboard from the round-end card.
-    FIX: 🌍 Global Board now has style="primary" (was uncoloured in screenshot).
+    Group leaderboard keyboard.
+    Row 1: [Current Chat ✅]  [🌍 Global]
+    Row 2: [Today]  [Week]  [All Time ✅]   (active tab gets ✅)
+    Row 3: [🎮 Play New Game]  (green)
     """
+    today_lbl   = "📅 Today ✅"   if time_filter == "today"   else "📅 Today"
+    week_lbl    = "📆 Week ✅"    if time_filter == "week"    else "📆 Week"
+    alltime_lbl = "🏆 All Time ✅" if time_filter == "alltime" else "🏆 All Time"
+
     rows = [
         [
-            _cb("🌍 Global Board", "cb:globalboard", style="primary"),  # ← was missing colour
-            _cb("🔄 Refresh",      "cb:leaderboard", style="primary"),                     # neutral
+            _cb("📍 Current Chat ✅", "lb:chat:alltime"),
+            _cb("🌍 Global",          "lb:global:alltime"),
         ],
         [
-            _cb("🎮 New Game", "theme:random", style="success"),
-            _cb("❓ Help",     "cb:help",  style="success"),                               # neutral
+            _cb(today_lbl,   f"lb:chat:{time_filter if time_filter=='today' else 'today'}"),
+            _cb(week_lbl,    f"lb:chat:{time_filter if time_filter=='week' else 'week'}"),
+            _cb(alltime_lbl, "lb:chat:alltime"),
+        ],
+        [
+            _cb("🎮 Play New Game", "theme:random", style="success"),
         ],
     ]
-    if next_round > 0 and theme_key:
-        rows.append([
-            _cb(f"▶️ Start Round {next_round}",
-                f"nextround:{theme_key}:{next_round}", style="success"),
-        ])
     return InlineKeyboardMarkup(rows)
 
 
-def globalboard_kb(next_round: int = 0, theme_key: str = "") -> InlineKeyboardMarkup:
+def globalboard_kb(next_round: int = 0, theme_key: str = "", is_hard: bool = False,
+                   time_filter: str = "alltime") -> InlineKeyboardMarkup:
     """
-    FIX #1 — Global leaderboard view with its own keyboard builder.
-    Carries the ▶️ Next Round button through from _pending_next so it is
-    never silently dropped when the user navigates to the Global Board
-    from a completed-round card.
+    Global leaderboard keyboard.
+    Row 1: [Current Chat]  [🌍 Global ✅]
+    Row 2: [Today]  [Week]  [All Time ✅]
+    Row 3: [🎮 Play New Game]  (green)
     """
+    today_lbl   = "📅 Today ✅"   if time_filter == "today"   else "📅 Today"
+    week_lbl    = "📆 Week ✅"    if time_filter == "week"    else "📆 Week"
+    alltime_lbl = "🏆 All Time ✅" if time_filter == "alltime" else "🏆 All Time"
+
     rows = [
         [
-            _cb("🏆 Group Board", "cb:leaderboard", style="primary"),
-            _cb("🔄 Refresh",     "cb:globalboard"),                     # neutral
+            _cb("📍 Current Chat",  "lb:chat:alltime"),
+            _cb("🌍 Global ✅",     "lb:global:alltime"),
         ],
         [
-            _cb("🎮 New Game", "theme:random", style="success"),
-            _cb("❓ Help",     "cb:help"),                               # neutral
+            _cb(today_lbl,   f"lb:global:{time_filter if time_filter=='today' else 'today'}"),
+            _cb(week_lbl,    f"lb:global:{time_filter if time_filter=='week' else 'week'}"),
+            _cb(alltime_lbl, "lb:global:alltime"),
+        ],
+        [
+            _cb("🎮 Play New Game", "theme:random", style="success"),
         ],
     ]
-    if next_round > 0 and theme_key:
-        rows.append([
-            _cb(f"▶️ Start Round {next_round}",
-                f"nextround:{theme_key}:{next_round}", style="danger"),
-        ])
     return InlineKeyboardMarkup(rows)
 
 
