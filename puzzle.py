@@ -1379,9 +1379,9 @@ def build_puzzle(theme_key: str, size: int, n_words: int) -> tuple:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  IMAGE RENDERER  (High Quality)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CELL   = 56          # base cell size (was 44)
-PAD    = 18          # padding around grid (tighter = less blank edge)
-HDR_H  = 100         # header height (was 80)
+CELL   = 68          # larger base cell size for full-image look
+PAD    = 14          # tight padding around grid
+HDR_H  = 72          # smaller header — only theme name
 CORNER = 10          # cell corner radius
 SCALE  = 2           # supersampling factor for anti-aliasing
 
@@ -1418,8 +1418,8 @@ def render_image(theme_key: str, grid: list, placed: list,
                  size: int) -> bytes:
     t = THEMES[theme_key]
 
-    # Scale cell size for larger grids
-    cell = max(36, CELL - max(0, size - 8) * 2)
+    # Scale cell size for larger grids — keep image under ~900px wide
+    cell = max(40, CELL - max(0, size - 6) * 3)
     s    = SCALE  # supersampling
 
     W = size * cell + PAD * 2
@@ -1453,10 +1453,10 @@ def render_image(theme_key: str, grid: list, placed: list,
     draw.rectangle([0, hdr2 - bar_h - s, W2, hdr2 - bar_h], fill=glow_col)
 
     # ── Fonts (scaled for supersampling) ───────────────────────────
-    letter_size  = max(14, 22 - max(0, size - 8) * 1) * s
+    letter_size  = max(18, 26 - max(0, size - 8) * 1) * s
     title_size   = 26 * s
     sub_size     = 15 * s
-    tag_size     = 11 * s
+    tag_size     = 12 * s
 
     FONT_BOLD  = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
     FONT_REG   = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
@@ -1467,20 +1467,14 @@ def render_image(theme_key: str, grid: list, placed: list,
     f_letter = _font(FONT_MONO, letter_size)
     f_tag    = _font(FONT_BOLD, tag_size)
 
-    # ── Title with shadow ───────────────────────────────────────────
+    # ── Title with shadow — only theme name ────────────────────────
     title    = f"{t['name'].upper()}  WORD  GRID"
     tw       = draw.textlength(title, font=f_title)
-    tx, ty   = (W2 - tw) / 2, 14 * s
+    tx, ty   = (W2 - tw) / 2, int((hdr2 - title_size) / 2) - 2 * s
     # shadow
     shadow   = tuple(max(v - 40, 0) for v in t["accent"])
     draw.text((tx + 2, ty + 2), title, fill=shadow,    font=f_title)
     draw.text((tx,     ty),     title, fill=t["accent"], font=f_title)
-
-    # ── Subtitle ────────────────────────────────────────────────────
-    sub = (f"Round {round_num}  •  {len(placed)} words  •  "
-           f"Found: {len(found_words)}/{len(placed)}")
-    sw  = draw.textlength(sub, font=f_sub)
-    draw.text(((W2 - sw) / 2, 52 * s), sub, fill=t["sub"], font=f_sub)
 
     # ── Corner accent dots ──────────────────────────────────────────
     r_dot = 6 * s
