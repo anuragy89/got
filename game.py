@@ -134,9 +134,10 @@ class GameSession:
 
     def get_hint(self, word: str) -> str:
         if len(word) <= 2:
-            return word
-        middle = " _ " * (len(word) - 2)
-        return f"{word[0]}{middle}{word[-1]}"
+            return word[0] + "_" * (len(word) - 1)
+        if len(word) == 3:
+            return word[0] + "_" + word[-1]
+        return word[0] + "_" * (len(word) - 2) + word[-1]
 
 
 class SessionManager:
