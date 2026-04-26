@@ -167,7 +167,6 @@ async def _end_round(chat_id, session, ctx, from_timer=False):
 
         touch_activity(chat_id)
         sessions.remove(chat_id)
-        sessions.set_cooldown(chat_id, secs=10)
 
         if all_msg_ids and MSG_DELETE_AFTER > 0:
             asyncio.create_task(
@@ -406,10 +405,6 @@ async def cmd_newgame(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if sessions.active(chat.id):
         await update.message.reply_text(f"{ICO_FIRE()} A game is already running!", parse_mode=ParseMode.HTML)
         return
-    if sessions.cooldown(chat.id):
-        left = sessions.cooldown_left(chat.id)
-        await update.message.reply_text(f"⏳ Cooldown — next game in <b>{left}s</b>.", parse_mode=ParseMode.HTML)
-        return
     args      = ctx.args or []
     arg       = args[0].lower() if args else "random"
     theme_key = arg if arg in THEMES else pick_random_theme(chat.id, THEME_LIST)
@@ -520,12 +515,6 @@ async def cmd_newhard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if sessions.active(chat.id):
         await update.message.reply_text(
             f"{ICO_FIRE()} A game is already running!", parse_mode=ParseMode.HTML
-        )
-        return
-    if sessions.cooldown(chat.id):
-        left = sessions.cooldown_left(chat.id)
-        await update.message.reply_text(
-            f"⏳ Cooldown — next game in <b>{left}s</b>.", parse_mode=ParseMode.HTML
         )
         return
     await update.message.reply_text(
@@ -649,7 +638,6 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_leaderboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
-    loop = asyncio.get_event_loop()
     if chat.type == ChatType.PRIVATE:
         rows  = await db.global_leaderboard()
         title = "Global Leaderboard"
@@ -666,17 +654,6 @@ async def cmd_leaderboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             nr, tk, ih = 0, "", False
         kb = leaderboard_kb(next_round=nr, theme_key=tk, is_hard=ih)
 
-    if rows:
-        try:
-            img = await loop.run_in_executor(None, render_leaderboard, rows, title)
-            await update.message.reply_photo(
-                photo=io.BytesIO(img), reply_markup=kb
-            )
-            return
-        except Exception as e:
-            log.warning(f"render_leaderboard failed: {e}")
-
-    # Fallback to text if image render fails
     text_title = f"🌍 {title}" if chat.type == ChatType.PRIVATE else f"🏆 {title}"
     await update.message.reply_text(
         leaderboard_text(rows, text_title), parse_mode=ParseMode.HTML, reply_markup=kb
@@ -693,20 +670,7 @@ async def cmd_globalboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         nr, tk = pending; ih = False
     else:
         nr, tk, ih = 0, "", False
-    kb   = globalboard_kb(next_round=nr, theme_key=tk, is_hard=ih)
-    loop = asyncio.get_event_loop()
-
-    if rows:
-        try:
-            img = await loop.run_in_executor(None, render_leaderboard, rows, "Global Leaderboard")
-            await update.message.reply_photo(
-                photo=io.BytesIO(img), reply_markup=kb
-            )
-            return
-        except Exception as e:
-            log.warning(f"render_leaderboard failed: {e}")
-
-    # Fallback to text if image render fails
+    kb = globalboard_kb(next_round=nr, theme_key=tk, is_hard=ih)
     await update.message.reply_text(
         leaderboard_text(rows, "🌍 Global Leaderboard"),
         parse_mode=ParseMode.HTML, reply_markup=kb,
@@ -834,9 +798,6 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if sessions.active(chat.id):
             await q.answer("A game is already running!", show_alert=True)
             return
-        if sessions.cooldown(chat.id):
-            await q.answer(f"Cooldown — {sessions.cooldown_left(chat.id)}s left.", show_alert=True)
-            return
         await db.upsert_group(chat)
         mode_label = "🚀 Automatic" if round_mode == "auto" else "🕹️ Manual"
         await q.answer(f"{mode_label} mode selected!")
@@ -855,7 +816,6 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _safe_edit_text(q, help_text(), reply_markup=back_kb())
 
     elif data == "cb:leaderboard":
-        loop = asyncio.get_event_loop()
         if chat.type == ChatType.PRIVATE:
             rows  = await db.global_leaderboard()
             title = "Global Leaderboard"
@@ -872,23 +832,10 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 nr, tk, ih = 0, "", False
             kb = leaderboard_kb(next_round=nr, theme_key=tk, is_hard=ih)
 
-        if rows:
-            try:
-                img = await loop.run_in_executor(None, render_leaderboard, rows, title)
-                try:
-                    await q.delete_message()
-                except TelegramError:
-                    pass
-                await chat.send_photo(photo=io.BytesIO(img), reply_markup=kb)
-                return
-            except Exception as e:
-                log.warning(f"cb:leaderboard render failed: {e}")
-
         text_title = f"🌍 {title}" if chat.type == ChatType.PRIVATE else f"🏆 {title}"
         await _safe_edit_text(q, leaderboard_text(rows, text_title), reply_markup=kb)
 
     elif data == "cb:globalboard":
-        loop    = asyncio.get_event_loop()
         rows    = await db.global_leaderboard()
         pending = _pending_next.get(chat.id)
         if pending and len(pending) == 3:
@@ -898,19 +845,6 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         else:
             nr, tk, ih = 0, "", False
         kb = globalboard_kb(next_round=nr, theme_key=tk, is_hard=ih)
-
-        if rows:
-            try:
-                img = await loop.run_in_executor(None, render_leaderboard, rows, "Global Leaderboard")
-                try:
-                    await q.delete_message()
-                except TelegramError:
-                    pass
-                await chat.send_photo(photo=io.BytesIO(img), reply_markup=kb)
-                return
-            except Exception as e:
-                log.warning(f"cb:globalboard render failed: {e}")
-
         await _safe_edit_text(
             q, leaderboard_text(rows, "🌍 Global Leaderboard"),
             reply_markup=kb,
@@ -1009,9 +943,6 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if sessions.active(chat.id):
             await q.answer("A game is already running!", show_alert=True)
             return
-        if sessions.cooldown(chat.id):
-            await q.answer(f"Cooldown — {sessions.cooldown_left(chat.id)}s left.", show_alert=True)
-            return
         if theme_key not in THEMES:
             theme_key = pick_random_theme(chat.id, THEME_LIST)
         await db.upsert_group(chat)
@@ -1034,9 +965,6 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             return
         if sessions.active(chat.id):
             await q.answer("A game is running! Finish it first.", show_alert=True)
-            return
-        if sessions.cooldown(chat.id):
-            await q.answer(f"Cooldown — {sessions.cooldown_left(chat.id)}s left.", show_alert=True)
             return
         await db.upsert_group(chat)
         await q.answer(f"Starting {THEMES[key]['emoji']} {THEMES[key]['name']}!")
