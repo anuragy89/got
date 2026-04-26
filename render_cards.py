@@ -347,259 +347,347 @@ def render_me_card(
     show_group: bool       = False,
     palette_idx: int       = -1,
 ) -> bytes:
-    # palette_idx = -1 means random each call
-    import random as _random
-    S = 2
-    W = 700
-    PAD = 26
+    """
+    Renders a profile card exactly matching the reference design:
+    - Dark navy background (#0D1B2A)
+    - Blue top border accent
+    - Large avatar circle (left), name + username + rank/streak pills (right)
+    - Thin divider line
+    - Progress label + XP bar + word count
+    - 3 stat boxes
+    - Tier path pills
+    - Streak bar at bottom with day dots
+    Fixed single colour scheme — no random palette.
+    """
+    # ── Fixed colour scheme matching reference screenshot ─────────
+    # Dark navy background, blue accent (matches the reference exactly)
+    S       = 2
+    W       = 700
+    PAD     = 28
 
-    # ── Palette — random every call for variety ───────────────────
-    if palette_idx < 0:
-        pal_idx = _random.randint(0, len(USER_PALETTES) - 1)
-    else:
-        pal_idx = palette_idx % len(USER_PALETTES)
-    CARD_BG, ACCENT, NAME_C, SUB_C, STAT_BG, STAT_BD = USER_PALETTES[pal_idx]
-    # Boost NAME_C and SUB_C contrast so text is always readable on dark bg
-    NAME_C = tuple(min(255, max(210, c)) for c in NAME_C)
-    SUB_C  = tuple(min(255, max(170, c)) for c in SUB_C)
-    ACCENT_LIGHT = tuple(min(255, int(c * 1.4 + 20)) for c in ACCENT)
+    CARD_BG      = (13, 27, 42)       # #0D1B2A  dark navy
+    ACCENT       = (55, 138, 221)     # #378ADD  blue
+    ACCENT_LIGHT = (130, 190, 255)    # lighter blue for shine/text
+    NAME_C       = (240, 248, 255)    # near-white for name
+    SUB_C        = (148, 175, 206)    # muted blue-grey for sub text
+    STAT_BG      = (19, 38, 60)       # slightly lighter than card bg
+    STAT_BD      = (35, 65, 105)      # border for stat boxes
+    DIVIDER      = (30, 55, 90)       # thin divider lines
 
-    # ── Tier ─────────────────────────────────────────────────────
+    # ── Tier detection ────────────────────────────────────────────
     tier_tag, tier_hex, tier_bg_hex, tier_glow_hex, next_label = _get_me_tier(words_found)
     TIER_C   = hex2rgb(tier_hex)
     TIER_BG  = hex2rgb(tier_bg_hex)
     TIER_GLW = hex2rgb(tier_glow_hex)
     done_xp, total_xp, xp_pct = _me_xp_progress(words_found)
 
-    # ── Fonts ─────────────────────────────────────────────────────
-    f_name  = font(FONT_BOLD, 22*S)
-    f_sub   = font(FONT_REG,  13*S)
-    f_tier  = font(FONT_BOLD, 14*S)
-    f_stat  = font(FONT_BOLD, 20*S)
-    f_slbl  = font(FONT_REG,  11*S)
-    f_path  = font(FONT_BOLD, 10*S)
-    f_xp    = font(FONT_REG,  11*S)
-    f_init  = font(FONT_BOLD, 28*S)
-    f_streak= font(FONT_BOLD, 15*S)
-
-    # ── Height calc (global profile only — no group section) ─────
-    MAIN_H = 530
-    H = MAIN_H
-    W2, H2 = W*S, H*S
+    # ── Canvas size ───────────────────────────────────────────────
+    # Matches reference proportions: wide card, sections stacked cleanly
+    CARD_W  = W
+    # Section heights (logical px before ×S):
+    #   Top bar       : 5
+    #   Header area   : 195  (avatar + name + rank/streak + xp bar)
+    #   Divider       : 1
+    #   Stats         : 115
+    #   Tier path     : 70
+    #   Streak bar    : 80
+    #   Footer        : 24
+    CARD_H  = 5 + 195 + 2 + 115 + 70 + 80 + 24
+    W2, H2  = CARD_W * S, CARD_H * S
 
     base = Image.new("RGB", (W2, H2), CARD_BG)
     draw = ImageDraw.Draw(base)
 
-    # ── Top accent bar ────────────────────────────────────────────
-    draw.rectangle([0, 0, W2, 10*S], fill=ACCENT)
-    draw.rectangle([0, 8*S, W2, 10*S], fill=ACCENT_LIGHT)
+    # ── Fonts — bigger sizes matching reference ───────────────────
+    f_name   = font(FONT_BOLD, 26*S)   # large name
+    f_sub    = font(FONT_REG,  13*S)   # @username, sub labels
+    f_tier   = font(FONT_BOLD, 11*S)   # tier badge text
+    f_stat_v = font(FONT_BOLD, 22*S)   # stat value (78,468)
+    f_stat_l = font(FONT_REG,  12*S)   # stat label (total score)
+    f_stat_s = font(FONT_BOLD, 11*S)   # stat sub (pts / all time)
+    f_path   = font(FONT_BOLD, 10*S)   # tier path pill text
+    f_xp     = font(FONT_REG,  12*S)   # xp bar labels
+    f_init   = font(FONT_BOLD, 30*S)   # initials in avatar
+    f_streak = font(FONT_BOLD, 14*S)   # streak bold text
+    f_streak_s = font(FONT_REG, 11*S)  # streak sub text
+    f_arrow  = font(FONT_BOLD, 13*S)   # › arrows between tier pills
 
-    # ── Avatar circle ─────────────────────────────────────────────
-    AX, AY, AR = PAD*S + 44*S, 38*S, 44*S
-    # Glow ring
-    for r_off in range(6, 0, -1):
-        alpha = int(80 * (r_off / 6))
-        glow_col = tuple(int(c * alpha / 255) + int(CARD_BG[j] * (255-alpha) / 255)
-                         for j, c in enumerate(TIER_GLW))
-        draw.ellipse([AX-AR-r_off*2, AY-AR-r_off*2, AX+AR+r_off*2, AY+AR+r_off*2],
-                     fill=glow_col)
-    # Avatar border
-    draw.ellipse([AX-AR-3, AY-AR-3, AX+AR+3, AY+AR+3], fill=TIER_C)
-    # Avatar fill / photo
+    # ── Top accent bar (5px blue line) ────────────────────────────
+    draw.rectangle([0, 0, W2, 5*S], fill=ACCENT)
+
+    # ──────────────────────────────────────────────────────────────
+    #  HEADER SECTION  (y: 5 → 200)
+    # ──────────────────────────────────────────────────────────────
+    HDR_TOP = 5   # px from top (after accent bar)
+
+    # Avatar: centred at x=85, y=HDR_TOP+95 (in logical px)
+    AX = 85 * S
+    AY = (HDR_TOP + 95) * S
+    AR = 52 * S   # radius — bigger circle like reference
+
+    # Glow ring around avatar (tier colour)
+    for r_off in range(8, 0, -1):
+        t   = r_off / 8
+        gc  = tuple(int(TIER_GLW[j] * t * 0.5 + CARD_BG[j] * (1 - t * 0.5))
+                    for j in range(3))
+        draw.ellipse([AX-AR-r_off*3, AY-AR-r_off*3,
+                      AX+AR+r_off*3, AY+AR+r_off*3], fill=gc)
+
+    # Avatar border ring (tier colour, 3px)
+    draw.ellipse([AX-AR-3*S//2, AY-AR-3*S//2,
+                  AX+AR+3*S//2, AY+AR+3*S//2], fill=TIER_C)
+
+    # Avatar fill / profile photo
     if avatar_bytes:
         try:
             av_img = Image.open(io.BytesIO(avatar_bytes)).convert("RGB")
-            av_img = av_img.resize((AR*2, AR*2), Image.LANCZOS)
-            mask   = Image.new("L", (AR*2, AR*2), 0)
-            ImageDraw.Draw(mask).ellipse([0, 0, AR*2, AR*2], fill=255)
-            tmp    = Image.new("RGB", (AR*2, AR*2), CARD_BG)
+            # Resize to fill the full circle diameter
+            diam = AR * 2
+            av_img = av_img.resize((diam, diam), Image.LANCZOS)
+            mask   = Image.new("L", (diam, diam), 0)
+            ImageDraw.Draw(mask).ellipse([0, 0, diam, diam], fill=255)
+            tmp    = Image.new("RGB", (diam, diam), CARD_BG)
             tmp.paste(av_img, (0, 0), mask)
-            base.paste(tmp, (AX-AR, AY-AR), mask)
+            base.paste(tmp, (AX - AR, AY - AR), mask)
         except Exception:
-            avatar_bytes = None
+            avatar_bytes = None   # fall through to initials
+
     if not avatar_bytes:
         draw.ellipse([AX-AR, AY-AR, AX+AR, AY+AR], fill=TIER_BG)
-        ini = (name[:2] if len(name) >= 2 else name).upper()
-        iw  = draw.textlength(ini, font=f_init)
-        draw.text((AX - iw//2, AY - 17*S), ini, fill=TIER_C, font=f_init)
+        ini = (name[:2] if len(name) >= 2 else name[0:1]).upper()
+        iw  = int(draw.textlength(ini, font=f_init))
+        draw.text((AX - iw // 2, AY - 18*S), ini, fill=TIER_C, font=f_init)
 
-    # Tier badge under avatar
-    badge_txt = tier_tag
-    bw = int(draw.textlength(badge_txt, font=f_tier)) + 18*S
-    bx = AX - bw//2
-    by = AY + AR + 6*S
-    rr(draw, bx, by, bw, 20*S, 10*S, fill=TIER_BG, outline=TIER_C, width=3)
-    draw.text((bx + 9*S, by + 4*S), badge_txt, fill=TIER_C, font=f_tier)
+    # Tier badge pill — centred under avatar
+    bdg_txt = tier_tag
+    bdg_w   = int(draw.textlength(bdg_txt, font=f_tier)) + 16*S
+    bdg_h   = 18*S
+    bdg_x   = AX - bdg_w // 2
+    bdg_y   = AY + AR + 6*S
+    rr(draw, bdg_x, bdg_y, bdg_w, bdg_h, bdg_h // 2,
+       fill=TIER_BG, outline=TIER_C, width=2*S//2)
+    tw_ = int(draw.textlength(bdg_txt, font=f_tier))
+    draw.text((bdg_x + (bdg_w - tw_) // 2, bdg_y + 4*S),
+              bdg_txt, fill=TIER_C, font=f_tier)
 
-    # ── Name + sub ────────────────────────────────────────────────
-    NX = AX + AR + 18*S
-    NY = 42*S
-    trunc_name = name[:20]
+    # Name text — to the right of avatar
+    NX = (85 + 52 + 22) * S   # avatar centre + radius + gap
+    NY = (HDR_TOP + 22) * S
+
+    trunc_name = name[:22]
     draw.text((NX, NY), trunc_name, fill=NAME_C, font=f_name)
-    sub_txt = f"@{name.lower().replace(' ','_')}  ·  WordGrid Player"
-    draw.text((NX, NY + 30*S), sub_txt, fill=SUB_C, font=f_sub)
 
-    # ── Global rank pill + streak badge ──────────────────────────
-    # Rank pill
-    rank_txt = f"#{global_rank}  Global"
-    rw2      = int(draw.textlength(rank_txt, font=f_sub)) + 20*S
-    rr(draw, NX, NY + 54*S, rw2, 22*S, 11*S, fill=STAT_BG, outline=ACCENT, width=2)
-    draw.text((NX + 10*S, NY + 58*S), rank_txt, fill=ACCENT_LIGHT, font=f_sub)
-    # Streak badge
-    streak_txt = f"🔥 {streak_days}d streak"
-    sx = NX + rw2 + 12*S
-    sw = int(draw.textlength(streak_txt, font=f_sub)) + 20*S
-    STREAK_BG  = (26, 14, 0)
-    STREAK_BD  = (216, 90, 48)
-    STREAK_TXT = (255, 160, 96)
-    rr(draw, sx, NY + 54*S, sw, 22*S, 11*S, fill=STREAK_BG, outline=STREAK_BD, width=2)
-    draw.text((sx + 10*S, NY + 58*S), streak_txt, fill=STREAK_TXT, font=f_sub)
+    # @username · since month year  (use username if available, else build from name)
+    username_str = getattr(None, 'username', None) or f"@{name.lower().replace(' ','_')}"
+    sub_line = f"@{name.lower().replace(' ','_')}  ·  WordGrid Player"
+    draw.text((NX, NY + 32*S), sub_line, fill=SUB_C, font=f_sub)
 
-    # ── XP bar ───────────────────────────────────────────────────
-    XP_Y  = NY + 90*S
-    XP_X  = NX
-    XP_W  = W2 - NX - PAD*S
-    next_tier_name = ME_TIERS[max(0, [t[0] for t in ME_TIERS].index(
-        next((t[0] for t in ME_TIERS if t[0] > words_found), ME_TIERS[0][0])
-    )  if words_found < ME_TIERS[0][0] else 0)][1] if words_found < ME_TIERS[0][0] else "MAX"
+    # Global rank pill  ──  filled dark, blue border
+    PILL_Y = NY + 58*S
+    PILL_H = 26*S
 
-    # label
+    rank_txt = f"#{global_rank}  Global rank"
+    rk_w     = int(draw.textlength(rank_txt, font=f_sub)) + 24*S
+    rr(draw, NX, PILL_Y, rk_w, PILL_H, PILL_H // 2,
+       fill=STAT_BG, outline=ACCENT, width=max(1, S//1))
+    draw.text((NX + 12*S, PILL_Y + 6*S), rank_txt, fill=ACCENT_LIGHT, font=f_sub)
+
+    # Streak pill  ──  dark bg, orange/red border
+    STK_BG  = (22, 11, 2)
+    STK_BD  = (210, 80, 40)
+    STK_TXT = (255, 150, 80)
+    stk_txt  = f"🔥 {streak_days}  day streak"
+    stk_x    = NX + rk_w + 14*S
+    stk_w    = int(draw.textlength(stk_txt, font=f_sub)) + 24*S
+    rr(draw, stk_x, PILL_Y, stk_w, PILL_H, PILL_H // 2,
+       fill=STK_BG, outline=STK_BD, width=max(1, S//1))
+    draw.text((stk_x + 12*S, PILL_Y + 6*S), stk_txt, fill=STK_TXT, font=f_sub)
+
+    # XP progress bar  ──  spans full width from NX to right edge
+    XP_TOP = PILL_Y + PILL_H + 16*S
+    XP_X   = NX
+    XP_W   = W2 - NX - PAD*S
+    XP_H   = 9*S
+
+    # label left
     if tier_tag != "RUBY":
-        xp_label = f"Progress to {next_label} words"
+        xp_lbl = f"Progress to {next_label}"
     else:
-        xp_label = "Tier: RUBY — Maximum reached!"
-    draw.text((XP_X, XP_Y - 16*S), xp_label, fill=SUB_C, font=f_xp)
-    xp_val_txt = f"{words_found:,} words"
-    xvw = int(draw.textlength(xp_val_txt, font=f_xp))
-    draw.text((W2 - PAD*S - xvw, XP_Y - 16*S), xp_val_txt, fill=ACCENT_LIGHT, font=f_xp)
+        xp_lbl = "Maximum tier reached!"
+    draw.text((XP_X, XP_TOP - 16*S), xp_lbl, fill=SUB_C, font=f_xp)
+    # label right — words count
+    xp_rval = f"{words_found:,} / {next_label} words" if tier_tag != "RUBY" else f"{words_found:,} words"
+    xrvw = int(draw.textlength(xp_rval, font=f_xp))
+    draw.text((W2 - PAD*S - xrvw, XP_TOP - 16*S), xp_rval, fill=ACCENT_LIGHT, font=f_xp)
     # track
-    rr(draw, XP_X, XP_Y, XP_W, 10*S, 5*S, fill=STAT_BG, outline=STAT_BD, width=1)
+    rr(draw, XP_X, XP_TOP, XP_W, XP_H, XP_H // 2, fill=STAT_BD)
     # fill
-    fw = max(int(XP_W * xp_pct), 10*S)
-    rr(draw, XP_X, XP_Y, fw, 10*S, 5*S, fill=ACCENT)
-    # shine strip
-    rr(draw, XP_X, XP_Y, fw, 4*S, 4*S, fill=ACCENT_LIGHT)
+    fill_w = max(int(XP_W * xp_pct), XP_H)
+    rr(draw, XP_X, XP_TOP, fill_w, XP_H, XP_H // 2, fill=ACCENT)
+    # shine
+    rr(draw, XP_X, XP_TOP, fill_w, XP_H // 2, XP_H // 2, fill=ACCENT_LIGHT)
 
-    # ── Divider ───────────────────────────────────────────────────
-    DIV_Y = XP_Y + 26*S
-    draw.line([(PAD*S, DIV_Y), (W2 - PAD*S, DIV_Y)], fill=STAT_BD, width=1)
+    # Thin divider below header
+    DIV_Y = (HDR_TOP + 195) * S
+    draw.line([(0, DIV_Y), (W2, DIV_Y)], fill=DIVIDER, width=S)
 
-    # ── Stat boxes ───────────────────────────────────────────────
-    STAT_Y  = DIV_Y + 16*S
-    stats   = [
-        (f"{score:,}", "total score", "pts"),
-        (f"{words_found:,}", "words found", "all time"),
-        (f"{rounds_won}/{rounds_played}", "rounds", f"{int(rounds_won/max(rounds_played,1)*100)}% win"),
+    # ──────────────────────────────────────────────────────────────
+    #  STAT BOXES  (y: 200 → 315)
+    # ──────────────────────────────────────────────────────────────
+    STAT_TOP = DIV_Y + 14*S
+    win_pct  = int(rounds_won / max(rounds_played, 1) * 100)
+    stats    = [
+        (f"{score:,}",             "Total score",  "pts"),
+        (f"{words_found:,}",       "Words found",  "all time"),
+        (f"{rounds_won}/{rounds_played}", "Rounds won", f"{win_pct}% win rate"),
     ]
-    SB_W = (W2 - PAD*S*2 - 16*S*2) // 3
-    SB_H = 78*S
-    for i, (val, lbl, sub) in enumerate(stats):
-        sx2 = PAD*S + i * (SB_W + 16*S)
-        rr(draw, sx2, STAT_Y, SB_W, SB_H, 10*S, fill=STAT_BG, outline=STAT_BD, width=1)
-        vw = int(draw.textlength(val, font=f_stat))
-        draw.text((sx2 + SB_W//2 - vw//2, STAT_Y + 10*S), val, fill=NAME_C, font=f_stat)
-        lw = int(draw.textlength(lbl, font=f_slbl))
-        draw.text((sx2 + SB_W//2 - lw//2, STAT_Y + 38*S), lbl, fill=SUB_C, font=f_slbl)
-        sw2 = int(draw.textlength(sub, font=f_slbl))
-        draw.text((sx2 + SB_W//2 - sw2//2, STAT_Y + 54*S), sub, fill=ACCENT_LIGHT, font=f_slbl)
+    GAP_S  = 14*S
+    SB_W   = (W2 - PAD*S*2 - GAP_S*2) // 3
+    SB_H   = 100*S
 
-    # ── Tier path row ─────────────────────────────────────────────
-    TP_Y    = STAT_Y + SB_H + 20*S
-    tiers   = list(reversed(ME_TIERS))  # Bronze first → Ruby last
-    n_tiers = len(tiers)
-    arrow_w = 16*S
-    usable  = W2 - PAD*S*2 - arrow_w*(n_tiers-1)
-    pill_w  = usable // n_tiers
+    for i, (val, lbl, sub) in enumerate(stats):
+        bx = PAD*S + i * (SB_W + GAP_S)
+        rr(draw, bx, STAT_TOP, SB_W, SB_H, 10*S, fill=STAT_BG, outline=STAT_BD, width=S)
+        # value (big)
+        vw = int(draw.textlength(val, font=f_stat_v))
+        draw.text((bx + (SB_W - vw) // 2, STAT_TOP + 14*S), val, fill=NAME_C, font=f_stat_v)
+        # label
+        lw = int(draw.textlength(lbl, font=f_stat_l))
+        draw.text((bx + (SB_W - lw) // 2, STAT_TOP + 46*S), lbl, fill=SUB_C, font=f_stat_l)
+        # sub
+        sw = int(draw.textlength(sub, font=f_stat_s))
+        draw.text((bx + (SB_W - sw) // 2, STAT_TOP + 65*S), sub, fill=ACCENT_LIGHT, font=f_stat_s)
+
+    # ──────────────────────────────────────────────────────────────
+    #  TIER PATH  (y: 315 → 385)
+    # ──────────────────────────────────────────────────────────────
+    TP_TOP  = STAT_TOP + SB_H + 20*S
+    tiers   = list(reversed(ME_TIERS))   # Bronze first → Ruby last
+    n_t     = len(tiers)
+    ARR_W   = 14*S
+    usable  = W2 - PAD*S*2 - ARR_W*(n_t - 1)
+    pill_w  = usable // n_t
     pill_h  = 28*S
 
-    active_idx = next((i for i,(mw,*_) in enumerate(tiers) if words_found >= mw), n_tiers-1)
+    # "Tier path" label
+    draw.text((PAD*S, TP_TOP - 18*S), "Tier path", fill=SUB_C, font=f_stat_l)
+
+    # Find which pill is active: highest tier the user has reached
+    # tiers list is Bronze→Ruby (left to right), so active = rightmost qualifying
+    active_idx = 0
+    for i, (min_w, *_) in enumerate(tiers):
+        if words_found >= min_w:
+            active_idx = i   # keep updating — last match = highest tier reached
 
     for i, (min_w, tag, acc, bg_h, glow_h, _) in enumerate(tiers):
-        px  = PAD*S + i*(pill_w + arrow_w)
-        is_done   = (i <= active_idx)
+        px      = PAD*S + i * (pill_w + ARR_W)
+        P_ACC   = hex2rgb(acc)
+        P_BG    = hex2rgb(bg_h)
+        P_GLOW  = hex2rgb(glow_h)
         is_active = (i == active_idx)
-        P_ACC  = hex2rgb(acc)
-        P_BG   = hex2rgb(bg_h)
-        P_GLOW = hex2rgb(glow_h)
+        is_done   = (i <= active_idx)
 
         if is_active:
-            # Glowing active pill — multi-ring glow
+            # Glowing highlighted pill
             for r_off in range(5, 0, -1):
-                gc = tuple(int(P_GLOW[j]*r_off/5 + CARD_BG[j]*(1-r_off/5)) for j in range(3))
-                rr(draw, px-r_off*2, TP_Y-r_off*2, pill_w+r_off*4, pill_h+r_off*4,
-                   pill_h//2+r_off, fill=gc)
-            rr(draw, px, TP_Y, pill_w, pill_h, pill_h//2, fill=P_BG, outline=P_ACC, width=3)
-        elif is_done:
-            rr(draw, px, TP_Y, pill_w, pill_h, pill_h//2, fill=P_BG, outline=P_ACC, width=2)
-        else:
-            dim_bg  = tuple(max(0, c - 10) for c in CARD_BG)
-            dim_bdr = tuple(int(c * 0.25) for c in P_ACC)
-            dim_txt_col = tuple(int(c * 0.3) for c in P_ACC)
-            rr(draw, px, TP_Y, pill_w, pill_h, pill_h//2, fill=dim_bg, outline=dim_bdr, width=1)
+                gc = tuple(int(P_GLOW[j] * r_off/5 + CARD_BG[j] * (1 - r_off/5))
+                           for j in range(3))
+                rr(draw, px - r_off*2, TP_TOP - r_off*2,
+                   pill_w + r_off*4, pill_h + r_off*4,
+                   pill_h // 2 + r_off, fill=gc)
+            rr(draw, px, TP_TOP, pill_w, pill_h, pill_h // 2,
+               fill=P_BG, outline=P_ACC, width=3)
             tw2 = int(draw.textlength(tag, font=f_path))
-            draw.text((px + pill_w//2 - tw2//2, TP_Y + 9*S), tag, fill=dim_txt_col, font=f_path)
-            # Draw arrow and continue
-            if i < n_tiers - 1:
-                ax = px + pill_w + arrow_w//2 - 4*S
-                ay = TP_Y + pill_h//2
-                draw.text((ax, ay - 8*S), "›", fill=dim_bdr, font=f_tier)
-            continue
+            draw.text((px + (pill_w - tw2) // 2, TP_TOP + 9*S),
+                      tag, fill=P_GLOW, font=f_path)
+        elif is_done:
+            rr(draw, px, TP_TOP, pill_w, pill_h, pill_h // 2,
+               fill=P_BG, outline=P_ACC, width=2)
+            tw2 = int(draw.textlength(tag, font=f_path))
+            draw.text((px + (pill_w - tw2) // 2, TP_TOP + 9*S),
+                      tag, fill=P_ACC, font=f_path)
+        else:
+            dim_bg  = tuple(max(0, c - 8) for c in CARD_BG)
+            dim_bdr = tuple(int(c * 0.22) for c in P_ACC)
+            dim_txt = tuple(int(c * 0.28) for c in P_ACC)
+            rr(draw, px, TP_TOP, pill_w, pill_h, pill_h // 2,
+               fill=dim_bg, outline=dim_bdr, width=1)
+            tw2 = int(draw.textlength(tag, font=f_path))
+            draw.text((px + (pill_w - tw2) // 2, TP_TOP + 9*S),
+                      tag, fill=dim_txt, font=f_path)
 
-        tw2 = int(draw.textlength(tag, font=f_path))
-        draw.text((px + pill_w//2 - tw2//2, TP_Y + 9*S), tag,
-                  fill=P_GLOW if is_active else P_ACC, font=f_path)
+        # Arrow › between pills
+        if i < n_t - 1:
+            ax   = px + pill_w + ARR_W // 2 - 5*S
+            ay   = TP_TOP + pill_h // 2 - 8*S
+            next_done = (i + 1 <= active_idx)
+            if next_done:
+                arr_c = hex2rgb(tiers[i+1][2])
+            else:
+                arr_c = tuple(int(c * 0.22) for c in hex2rgb(tiers[i+1][2]))
+            draw.text((ax, ay), "›", fill=arr_c, font=f_arrow)
 
-        # Arrow between pills
-        if i < n_tiers - 1:
-            ax = px + pill_w + arrow_w//2 - 4*S
-            ay = TP_Y + pill_h//2
-            next_done = (i+1 <= active_idx)
-            arr_col = hex2rgb(tiers[i+1][2]) if next_done else tuple(int(c*0.25) for c in hex2rgb(tiers[i+1][2]))
-            draw.text((ax, ay - 8*S), "›", fill=arr_col, font=f_tier)
+    # ──────────────────────────────────────────────────────────────
+    #  STREAK BAR  (y: 385 → 465)
+    # ──────────────────────────────────────────────────────────────
+    STR_TOP = TP_TOP + pill_h + 18*S
+    SBAR_BG = tuple(max(0, c - 6) for c in CARD_BG)
+    draw.rectangle([0, STR_TOP, W2, STR_TOP + 72*S], fill=SBAR_BG)
+    draw.line([(0, STR_TOP), (W2, STR_TOP)], fill=DIVIDER, width=S)
 
-    # ── Daily streak bar ─────────────────────────────────────────
-    STR_Y = TP_Y + pill_h + 18*S
-    SBAR_BG  = tuple(max(0, c - 8) for c in CARD_BG)
-    draw.rectangle([0, STR_Y, W2, STR_Y + 60*S], fill=SBAR_BG)
-    draw.line([(0, STR_Y), (W2, STR_Y)], fill=STAT_BD, width=1)
+    # Flame icon drawn as simple orange circle + text "🔥" fallback with text label
+    flame_x = PAD*S
+    flame_y = STR_TOP + 12*S
+    # Draw a small orange flame circle as visual indicator
+    fc = 16*S
+    draw.ellipse([flame_x, flame_y + 2*S, flame_x + fc, flame_y + fc + 2*S], fill=(216, 90, 48))
+    draw.ellipse([flame_x + 3*S, flame_y + 4*S, flame_x + fc - 3*S, flame_y + fc - 2*S], fill=(255, 160, 80))
+    big_str = f"{streak_days}-day streak — keep it going!"
+    draw.text((flame_x + fc + 8*S, flame_y + 2*S), big_str,
+              fill=(255, 160, 80), font=f_streak)
+    sub_str = "Play at least one round today to extend it"
+    draw.text((flame_x + fc + 8*S, flame_y + 22*S), sub_str,
+              fill=(140, 80, 30), font=f_streak_s)
 
-    # Flame icon + label
-    flame_txt = "🔥"
-    draw.text((PAD*S, STR_Y + 14*S), flame_txt, font=f_streak)
-    streakbig = f"{streak_days}-day streak!"
-    draw.text((PAD*S + 30*S, STR_Y + 12*S), streakbig, fill=(255,160,80), font=f_streak)
-    sub_str   = "Play at least one round daily to keep it going"
-    draw.text((PAD*S + 30*S, STR_Y + 32*S), sub_str, fill=(120,70,20), font=f_xp)
+    # 7 day-dot circles (right side)
+    DAYS      = ["M", "T", "W", "T", "F", "S", "S"]
+    dot_r     = 16*S
+    dot_gap   = 6*S
+    total_dw  = len(DAYS) * dot_r*2 + (len(DAYS) - 1) * dot_gap
+    dot_x0    = W2 - PAD*S - total_dw
+    dot_cy    = STR_TOP + 36*S     # centre y of dots
+    played    = min(streak_days, 7)
 
-    # 7-dot week row
-    DAYS = ["M","T","W","T","F","S","S"]
-    dot_r    = 14*S
-    dot_gap  = 8*S
-    total_dw = len(DAYS)*(dot_r*2) + (len(DAYS)-1)*dot_gap
-    dot_x0   = W2 - PAD*S - total_dw
-    dot_y    = STR_Y + 15*S
-    played_days = min(streak_days, 7)
     for di, day in enumerate(DAYS):
         dx = dot_x0 + di * (dot_r*2 + dot_gap)
-        dy = dot_y
-        if di < played_days - 1:
-            draw.ellipse([dx, dy, dx+dot_r*2, dy+dot_r*2], fill=(216,90,48))
-        elif di == played_days - 1:
-            # Today — brighter
-            draw.ellipse([dx-2, dy-2, dx+dot_r*2+2, dy+dot_r*2+2], fill=(255,160,80))
-            draw.ellipse([dx, dy, dx+dot_r*2, dy+dot_r*2], fill=(255,200,100))
+        dy = dot_cy - dot_r
+        if di < played - 1:
+            fill_c = (216, 90, 48)
+        elif di == played - 1:
+            # Today — brighter/highlighted
+            draw.ellipse([dx - 2, dy - 2, dx + dot_r*2 + 2, dy + dot_r*2 + 2],
+                         fill=(255, 160, 80))
+            fill_c = (255, 200, 100)
         else:
-            draw.ellipse([dx, dy, dx+dot_r*2, dy+dot_r*2], fill=(40,20,5), outline=(80,40,10), width=1)
-        dw2 = int(draw.textlength(day, font=f_xp))
-        draw.text((dx + dot_r - dw2//2, dy + 10*S), day, fill=(255,255,255) if di < played_days else (60,35,10), font=f_xp)
+            fill_c = (35, 18, 5)
+        draw.ellipse([dx, dy, dx + dot_r*2, dy + dot_r*2], fill=fill_c)
+        if di != played - 1:   # highlight already drawn above
+            pass
+        dw2 = int(draw.textlength(day, font=f_streak_s))
+        txt_c = (255, 255, 255) if di < played else (70, 38, 12)
+        draw.text((dx + dot_r - dw2 // 2, dot_cy - 7*S), day,
+                  fill=txt_c, font=f_streak_s)
 
-    # ── Footer watermark ─────────────────────────────────────────
-    FTR_Y = H2 - 22*S
+    # ──────────────────────────────────────────────────────────────
+    #  FOOTER watermark
+    # ──────────────────────────────────────────────────────────────
+    FTR_Y = H2 - 20*S
     ftxt  = "WordGrid Bot  •  /me"
-    fw2   = int(draw.textlength(ftxt, font=f_xp))
-    draw.text((W2//2 - fw2//2, FTR_Y), ftxt, fill=STAT_BD, font=f_xp)
+    fw    = int(draw.textlength(ftxt, font=f_streak_s))
+    draw.text((W2 // 2 - fw // 2, FTR_Y), ftxt, fill=DIVIDER, font=f_streak_s)
 
-    out = base.resize((W, H), Image.LANCZOS)
+    # ── Final output ─────────────────────────────────────────────
+    out = base.resize((CARD_W, CARD_H), Image.LANCZOS)
     buf = io.BytesIO()
     out.save(buf, "PNG", optimize=True, compress_level=6)
     buf.seek(0)
