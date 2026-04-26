@@ -10,6 +10,91 @@ if not _os.path.exists(FONT_BOLD):
 if not _os.path.exists(FONT_REG):
     FONT_REG  = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
+# ── Multi-script font map ─────────────────────────────────────────
+# Maps script name → (bold_path, regular_path)
+_SCRIPT_FONTS = {
+    "arabic":     ("/usr/share/fonts/truetype/noto/NotoNaskhArabic-Bold.ttf",
+                   "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf"),
+    "devanagari": ("/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf",
+                   "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf"),
+    "cjk":        ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+                   "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+}
+_font_cache: dict = {}
+
+def _script_of(ch: str) -> str:
+    """Return the Unicode script family of a single character."""
+    import unicodedata
+    cp = ord(ch)
+    if 0x0600 <= cp <= 0x06FF or 0x0750 <= cp <= 0x077F or 0xFB50 <= cp <= 0xFDFF or 0xFE70 <= cp <= 0xFEFF:
+        return "arabic"
+    if 0x0900 <= cp <= 0x097F:
+        return "devanagari"
+    if (0x4E00 <= cp <= 0x9FFF or 0x3000 <= cp <= 0x9FFF or
+            0xAC00 <= cp <= 0xD7AF or 0x3040 <= cp <= 0x309F or 0x30A0 <= cp <= 0x30FF):
+        return "cjk"
+    try:
+        name = unicodedata.name(ch, "")
+        if "ARABIC"     in name: return "arabic"
+        if "DEVANAGARI" in name: return "devanagari"
+        if "CJK"        in name or "HIRAGANA" in name or "KATAKANA" in name: return "cjk"
+        if "HANGUL"     in name: return "cjk"
+    except Exception:
+        pass
+    return "latin"
+
+def _get_script_font(script: str, size: int, bold: bool = True) -> "ImageFont.FreeTypeFont":
+    """Return a cached font object for the given script and size."""
+    key = (script, size, bold)
+    if key in _font_cache:
+        return _font_cache[key]
+    paths = _SCRIPT_FONTS.get(script, (FONT_BOLD, FONT_REG))
+    path  = paths[0] if bold else paths[1]
+    try:
+        f = ImageFont.truetype(path, size)
+    except Exception:
+        f = ImageFont.truetype(FONT_BOLD if bold else FONT_REG, size)
+    _font_cache[key] = f
+    return f
+
+def draw_text_ms(draw, text: str, x: int, y: int, base_font,
+                 fill, bold: bool = True) -> int:
+    """
+    Draw text with automatic per-character script-aware font selection.
+    Returns the total pixel width drawn.
+    """
+    size = base_font.size
+    cx   = x
+    for ch in text:
+        if ch == " ":
+            cx += size // 3
+            continue
+        script = _script_of(ch)
+        f = base_font if script == "latin" else _get_script_font(script, size, bold)
+        try:
+            w = int(draw.textlength(ch, font=f))
+            draw.text((cx, y), ch, fill=fill, font=f)
+            cx += w
+        except Exception:
+            cx += size // 2
+    return cx - x
+
+def measure_text_ms(draw, text: str, base_font, bold: bool = True) -> int:
+    """Measure total width of multi-script text."""
+    size  = base_font.size
+    total = 0
+    for ch in text:
+        if ch == " ":
+            total += size // 3
+            continue
+        script = _script_of(ch)
+        f = base_font if script == "latin" else _get_script_font(script, size, bold)
+        try:
+            total += int(draw.textlength(ch, font=f))
+        except Exception:
+            total += size // 2
+    return total
+
 def font(path, size):
     try: return ImageFont.truetype(path, size)
     except: return ImageFont.load_default()
@@ -462,8 +547,8 @@ def render_me_card(
     if not avatar_bytes:
         draw.ellipse([AX-AR, AY-AR, AX+AR, AY+AR], fill=TIER_BG)
         ini = (name[:2] if len(name) >= 2 else name[0:1]).upper()
-        iw  = int(draw.textlength(ini, font=f_init))
-        draw.text((AX - iw // 2, AY - 18*S), ini, fill=TIER_C, font=f_init)
+        iw  = measure_text_ms(draw, ini, f_init, bold=True)
+        draw_text_ms(draw, ini, AX - iw // 2, AY - 18*S, f_init, fill=TIER_C, bold=True)
 
     # Tier badge pill — centred under avatar
     bdg_txt = tier_tag
@@ -482,12 +567,11 @@ def render_me_card(
     NY = (HDR_TOP + 22) * S
 
     trunc_name = name[:22]
-    draw.text((NX, NY), trunc_name, fill=NAME_C, font=f_name)
+    draw_text_ms(draw, trunc_name, NX, NY, f_name, fill=NAME_C, bold=True)
 
-    # @username · since month year  (use username if available, else build from name)
-    username_str = getattr(None, 'username', None) or f"@{name.lower().replace(' ','_')}"
+    # @username · WordGrid Player
     sub_line = f"@{name.lower().replace(' ','_')}  ·  WordGrid Player"
-    draw.text((NX, NY + 32*S), sub_line, fill=SUB_C, font=f_sub)
+    draw_text_ms(draw, sub_line, NX, NY + 32*S, f_sub, fill=SUB_C, bold=False)
 
     # Global rank pill  ──  filled dark, blue border
     PILL_Y = NY + 58*S
