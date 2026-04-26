@@ -23,7 +23,7 @@ from game import (
 from keyboards import (
     start_kb, theme_kb, game_action_kb, hard_action_kb, leaderboard_kb, globalboard_kb,
     back_kb, next_round_kb, final_round_kb, round_over_no_next_kb,
-    word_found_kb,
+    word_found_kb, round_mode_kb,
 )
 from puzzle import build_puzzle, render_image, THEMES, THEME_LIST
 from strings import (
@@ -137,15 +137,21 @@ async def _end_round(chat_id, session, ctx, from_timer=False):
         )
 
         # ── Choose keyboard ──────────────────────────────────────────
-        # Auto-next-round replaces the manual "▶️ Start Round N" button,
-        # so we only show leaderboard / add-me buttons now.
+        # Manual mode: show "▶️ Start Round N" button
+        # Auto mode: no next-round button, auto-starts after countdown
+        is_manual = getattr(session, 'round_mode', 'auto') == 'manual'
+        is_hard   = getattr(session, 'is_hard', False)
+
         if is_final:
             kb = final_round_kb()
             _pending_next.pop(chat_id, None)
+        elif round_complete and is_manual:
+            kb = next_round_kb(next_round_num, next_theme, is_hard=is_hard)
+            _pending_next[chat_id] = (next_round_num, next_theme, is_hard)
         else:
             kb = round_over_no_next_kb()
             if round_complete:
-                _pending_next[chat_id] = (next_round_num, next_theme)
+                _pending_next[chat_id] = (next_round_num, next_theme, is_hard)
             else:
                 _pending_next.pop(chat_id, None)
 
@@ -168,16 +174,17 @@ async def _end_round(chat_id, session, ctx, from_timer=False):
                 _delete_messages_later(ctx.bot, chat_id, all_msg_ids, MSG_DELETE_AFTER)
             )
 
-        # ── Auto-start next round after 10-second countdown ──────────
-        if round_complete and not is_final:
+        # ── Auto-start next round after 10-second countdown (auto mode only) ──
+        if round_complete and not is_final and not is_manual:
             asyncio.create_task(
-                _auto_next_round(chat_id, next_round_num, next_theme, ctx)
+                _auto_next_round(chat_id, next_round_num, next_theme, ctx, is_hard=is_hard)
             )
     finally:
         _ending_round.discard(chat_id)
 
 
-async def _auto_next_round(chat_id: int, next_round: int, theme_key: str, ctx):
+async def _auto_next_round(chat_id: int, next_round: int, theme_key: str, ctx,
+                           is_hard: bool = False):
     """
     Send an animated digital-clock GIF countdown (10→1) as a single
     Telegram animation message, then auto-launch the next round.
@@ -240,13 +247,10 @@ async def _auto_next_round(chat_id: int, next_round: int, theme_key: str, ctx):
     if sessions.active(chat_id) or sessions.cooldown(chat_id):
         return
 
-    await _launch(chat_id, theme_key, round_num=next_round, ctx=ctx)
-
-    # Final guard: don't start if something else took over
-    if sessions.active(chat_id) or sessions.cooldown(chat_id):
-        return
-
-    await _launch(chat_id, theme_key, round_num=next_round, ctx=ctx)
+    if is_hard:
+        await _launch_hard(chat_id, ctx=ctx, round_mode="auto")
+    else:
+        await _launch(chat_id, theme_key, round_num=next_round, ctx=ctx, round_mode="auto")
 
 
 async def _timer_task(chat_id, session, ctx):
@@ -271,7 +275,7 @@ async def _timer_task(chat_id, session, ctx):
         await _end_round(chat_id, session, ctx, from_timer=True)
 
 
-async def _launch(chat_id, theme_key, round_num, ctx):
+async def _launch(chat_id, theme_key, round_num, ctx, round_mode: str = "auto"):
     duration, n_words, grid_size = get_level(round_num)
     t = THEMES[theme_key]
 
@@ -308,7 +312,8 @@ async def _launch(chat_id, theme_key, round_num, ctx):
             pass
         return
 
-    session = GameSession(chat_id, theme_key, grid, words, placed, round_num, img)
+    session = GameSession(chat_id, theme_key, grid, words, placed, round_num, img,
+                          round_mode=round_mode)
     sessions.put(session)
     touch_activity(chat_id)
     _pending_next.pop(chat_id, None)
@@ -408,10 +413,18 @@ async def cmd_newgame(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     args      = ctx.args or []
     arg       = args[0].lower() if args else "random"
     theme_key = arg if arg in THEMES else pick_random_theme(chat.id, THEME_LIST)
-    await _launch(chat.id, theme_key, round_num=1, ctx=ctx)
+    # Store chosen theme for when mode is selected
+    ctx.chat_data["pending_theme"] = theme_key
+    await update.message.reply_text(
+        f"{ICO_ROCKET()} <b>Choose round progression mode:</b>\n\n"
+        f"🚀 <b>Automatic</b> — next round starts automatically after 10s\n"
+        f"🕹️ <b>Manual</b> — you press the button to start each round",
+        parse_mode=ParseMode.HTML,
+        reply_markup=round_mode_kb("normal"),
+    )
 
 
-async def _launch_hard(chat_id: int, ctx) -> None:
+async def _launch_hard(chat_id: int, ctx, round_mode: str = "auto") -> None:
     """Start a single /newhard session — 11x11 grid, 10-15 words, high pts."""
     from puzzle import render_image as _render_image, _place, _empty, _fill
 
@@ -466,7 +479,7 @@ async def _launch_hard(chat_id: int, ctx) -> None:
     )
 
     session = GameSession(chat_id, theme_key, grid, words, placed,
-                          round_num=1, img_bytes=img, is_hard=True)
+                          round_num=1, img_bytes=img, is_hard=True, round_mode=round_mode)
     sessions.put(session)
     touch_activity(chat_id)
     _pending_next.pop(chat_id, None)
@@ -515,7 +528,13 @@ async def cmd_newhard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             f"⏳ Cooldown — next game in <b>{left}s</b>.", parse_mode=ParseMode.HTML
         )
         return
-    await _launch_hard(chat.id, ctx=ctx)
+    await update.message.reply_text(
+        f"{ICO_FIRE()} <b>🔥 HARD MODE — Choose round progression:</b>\n\n"
+        f"🚀 <b>Automatic</b> — next hard round starts automatically after 10s\n"
+        f"🕹️ <b>Manual</b> — you press the button to start each hard round",
+        parse_mode=ParseMode.HTML,
+        reply_markup=round_mode_kb("hard"),
+    )
 
 
 async def cmd_hint(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -639,8 +658,13 @@ async def cmd_leaderboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         rows    = await db.group_leaderboard(chat.id)
         title   = chat.title or "Group Leaderboard"
         pending = _pending_next.get(chat.id)
-        nr, tk  = pending if pending else (0, "")
-        kb      = leaderboard_kb(next_round=nr, theme_key=tk)
+        if pending and len(pending) == 3:
+            nr, tk, ih = pending
+        elif pending:
+            nr, tk = pending; ih = False
+        else:
+            nr, tk, ih = 0, "", False
+        kb = leaderboard_kb(next_round=nr, theme_key=tk, is_hard=ih)
 
     if rows:
         try:
@@ -663,9 +687,14 @@ async def cmd_globalboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat    = update.effective_chat
     rows    = await db.global_leaderboard()
     pending = _pending_next.get(chat.id)
-    nr, tk  = pending if pending else (0, "")
-    kb      = globalboard_kb(next_round=nr, theme_key=tk)
-    loop    = asyncio.get_event_loop()
+    if pending and len(pending) == 3:
+        nr, tk, ih = pending
+    elif pending:
+        nr, tk = pending; ih = False
+    else:
+        nr, tk, ih = 0, "", False
+    kb   = globalboard_kb(next_round=nr, theme_key=tk, is_hard=ih)
+    loop = asyncio.get_event_loop()
 
     if rows:
         try:
@@ -791,6 +820,37 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if data == "cb:start":
         await _safe_edit_text(q, start_private(user.first_name), reply_markup=start_kb())
 
+    elif data.startswith("startmode:"):
+        # startmode:{game_type}:{mode}  e.g. startmode:normal:auto
+        parts = data.split(":")
+        if len(parts) != 3:
+            await q.answer("Invalid selection.", show_alert=True)
+            return
+        game_type  = parts[1]   # "normal" or "hard"
+        round_mode = parts[2]   # "auto" or "manual"
+        if chat.type == ChatType.PRIVATE:
+            await q.answer("Add me to a group to play!", show_alert=True)
+            return
+        if sessions.active(chat.id):
+            await q.answer("A game is already running!", show_alert=True)
+            return
+        if sessions.cooldown(chat.id):
+            await q.answer(f"Cooldown — {sessions.cooldown_left(chat.id)}s left.", show_alert=True)
+            return
+        await db.upsert_group(chat)
+        mode_label = "🚀 Automatic" if round_mode == "auto" else "🕹️ Manual"
+        await q.answer(f"{mode_label} mode selected!")
+        try:
+            await q.delete_message()
+        except TelegramError:
+            pass
+        if game_type == "hard":
+            await _launch_hard(chat.id, ctx=ctx, round_mode=round_mode)
+        else:
+            theme_key = ctx.chat_data.get("pending_theme") or pick_random_theme(chat.id, THEME_LIST)
+            ctx.chat_data.pop("pending_theme", None)
+            await _launch(chat.id, theme_key, round_num=1, ctx=ctx, round_mode=round_mode)
+
     elif data == "cb:help":
         await _safe_edit_text(q, help_text(), reply_markup=back_kb())
 
@@ -804,8 +864,13 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             rows    = await db.group_leaderboard(chat.id)
             title   = chat.title or "Group Leaderboard"
             pending = _pending_next.get(chat.id)
-            nr, tk  = pending if pending else (0, "")
-            kb      = leaderboard_kb(next_round=nr, theme_key=tk)
+            if pending and len(pending) == 3:
+                nr, tk, ih = pending
+            elif pending:
+                nr, tk = pending; ih = False
+            else:
+                nr, tk, ih = 0, "", False
+            kb = leaderboard_kb(next_round=nr, theme_key=tk, is_hard=ih)
 
         if rows:
             try:
@@ -826,8 +891,13 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         loop    = asyncio.get_event_loop()
         rows    = await db.global_leaderboard()
         pending = _pending_next.get(chat.id)
-        nr, tk  = pending if pending else (0, "")
-        kb      = globalboard_kb(next_round=nr, theme_key=tk)
+        if pending and len(pending) == 3:
+            nr, tk, ih = pending
+        elif pending:
+            nr, tk = pending; ih = False
+        else:
+            nr, tk, ih = 0, "", False
+        kb = globalboard_kb(next_round=nr, theme_key=tk, is_hard=ih)
 
         if rows:
             try:
@@ -845,6 +915,10 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             q, leaderboard_text(rows, "🌍 Global Leaderboard"),
             reply_markup=kb,
         )
+
+    elif data.startswith("lb:"):
+        # Leaderboard time filter — for now all show all-time (db doesn't store timestamps)
+        await q.answer("Showing all-time scores.", show_alert=False)
 
     elif data == "cb:timeleft":
         session = sessions.get(chat.id)
@@ -920,13 +994,15 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("nextround:"):
         parts = data.split(":")
-        if len(parts) != 3:
+        if len(parts) < 3:
             return
-        theme_key = parts[1]
+        theme_key  = parts[1]
         try:
             next_round = int(parts[2])
         except ValueError:
             return
+        # parts[3] optionally carries "hard" or "normal"
+        is_hard_next = (len(parts) >= 4 and parts[3] == "hard")
         if chat.type == ChatType.PRIVATE:
             await q.answer("Add me to a group to play!", show_alert=True)
             return
@@ -944,7 +1020,10 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await q.delete_message()
         except TelegramError:
             pass
-        await _launch(chat.id, theme_key, round_num=next_round, ctx=ctx)
+        if is_hard_next:
+            await _launch_hard(chat.id, ctx=ctx, round_mode="manual")
+        else:
+            await _launch(chat.id, theme_key, round_num=next_round, ctx=ctx, round_mode="manual")
 
     elif data.startswith("theme:"):
         key = data.split(":")[1]
