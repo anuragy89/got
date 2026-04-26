@@ -14,12 +14,12 @@ def _pe(eid, fallback):
     return fallback
 
 
-def _BTN_AUTO():      return _pe(PEMOJI_ROCKET,    "🚀")
-def _BTN_MANUAL():    return _pe(PEMOJI_JOYSTICK,  "🕹️")
-def _BTN_NEXT():      return _pe(PEMOJI_LIGHTNING, "⚡")
-def _BTN_TROPHY():    return _pe(PEMOJI_TROPHY,    "🏆")
-def _BTN_FIRE():      return _pe(PEMOJI_FIRE,      "🔥")
-def _BTN_STAR():      return _pe(PEMOJI_STAR,      "⭐")
+def _BTN_AUTO():      return "🚀"
+def _BTN_MANUAL():    return "🕹️"
+def _BTN_NEXT():      return "⚡"
+def _BTN_TROPHY():    return "🏆"
+def _BTN_FIRE():      return "🔥"
+def _BTN_STAR():      return "⭐"
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
