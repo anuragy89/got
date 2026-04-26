@@ -24,18 +24,18 @@ HARD_FIRST_PTS        = 25    # pts for first find in hard mode (max)
 #  round_num → (duration_secs, words_to_find, grid_size)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ROUND_LEVELS = {
-    1:  (50,  3,  4),
-    2:  (80,  4,  5),
-    3:  (110,  5,  6),
-    4:  (140, 6,  7),
-    5:  (170, 7,  7),
-    6:  (200, 8,  8),
-    7:  (230, 9,  8),
-    8:  (260, 10, 9),
-    9:  (290, 11, 9),
-    10: (320, 12, 10),
-    11: (350, 13, 10),
-    12: (380, 14, 11),
+    1:  (120,  6,  7),
+    2:  (130,  6,  7),
+    3:  (150,  7,  8),
+    4:  (170, 7,  8),
+    5:  (190, 7,  8),
+    6:  (210, 8,  8),
+    7:  (250, 9,  8),
+    8:  (270, 10, 9),
+    9:  (300, 11, 9),
+    10: (350, 12, 10),
+    11: (400, 13, 10),
+    12: (450, 14, 11),
 }
 MAX_ROUNDS = 12
 
@@ -46,7 +46,7 @@ def get_level(round_num: int) -> tuple:
 
 class GameSession:
     def __init__(self, chat_id, theme, grid, words, placed, round_num, img_bytes,
-                 is_hard: bool = False):
+                 is_hard: bool = False, round_mode: str = "auto"):
         self.chat_id      = chat_id
         self.theme        = theme
         self.grid         = grid
@@ -55,6 +55,7 @@ class GameSession:
         self.round_num    = round_num
         self.img_bytes    = img_bytes
         self.is_hard      = is_hard          # True for /newhard sessions
+        self.round_mode   = round_mode       # "auto" or "manual"
         self.found_words  : list           = []
         self.finders      : Dict[str,dict] = {}
         self.p_combos     : Dict[int,int]  = {}
