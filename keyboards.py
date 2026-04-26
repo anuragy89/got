@@ -202,58 +202,61 @@ def final_round_kb() -> InlineKeyboardMarkup:
     ])
 
 
-def leaderboard_kb(next_round: int = 0, theme_key: str = "", is_hard: bool = False) -> InlineKeyboardMarkup:
+def leaderboard_kb(next_round: int = 0, theme_key: str = "", is_hard: bool = False,
+                   time_filter: str = "alltime") -> InlineKeyboardMarkup:
     """
-    Group leaderboard — matches screenshot layout with Current Chat / Global tabs
-    and Today / Week / All Time filter tabs.
+    Group leaderboard keyboard.
+    Row 1: [Current Chat ✅]  [🌍 Global]
+    Row 2: [Today]  [Week]  [All Time ✅]   (active tab gets ✅)
+    Row 3: [🎮 Play New Game]  (green)
     """
+    today_lbl   = "📅 Today ✅"   if time_filter == "today"   else "📅 Today"
+    week_lbl    = "📆 Week ✅"    if time_filter == "week"    else "📆 Week"
+    alltime_lbl = "🏆 All Time ✅" if time_filter == "alltime" else "🏆 All Time"
+
     rows = [
         [
-            _cb("📍 Current Chat", "cb:leaderboard", style="primary"),
-            _cb("🌍 Global",       "cb:globalboard", style="primary"),
+            _cb("📍 Current Chat ✅", "lb:chat:alltime"),
+            _cb("🌍 Global",          "lb:global:alltime"),
         ],
         [
-            _cb("📅 Today",   "lb:today"),
-            _cb("📆 Week",    "lb:week"),
-            _cb("🏆 All Time","lb:alltime", style="success"),
+            _cb(today_lbl,   f"lb:chat:{time_filter if time_filter=='today' else 'today'}"),
+            _cb(week_lbl,    f"lb:chat:{time_filter if time_filter=='week' else 'week'}"),
+            _cb(alltime_lbl, "lb:chat:alltime"),
         ],
         [
-            _cb("🎮 New Game", "theme:random", style="success"),
-            _cb("❓ Help",     "cb:help"),
+            _cb("🎮 Play New Game", "theme:random", style="success"),
         ],
     ]
-    if next_round > 0 and theme_key:
-        mode = "hard" if is_hard else "normal"
-        rows.append([
-            _cb(f"{_BTN_NEXT()} Start Round {next_round}",
-                f"nextround:{theme_key}:{next_round}:{mode}", style="success"),
-        ])
     return InlineKeyboardMarkup(rows)
 
 
-def globalboard_kb(next_round: int = 0, theme_key: str = "", is_hard: bool = False) -> InlineKeyboardMarkup:
-    """Global leaderboard view — matches screenshot."""
+def globalboard_kb(next_round: int = 0, theme_key: str = "", is_hard: bool = False,
+                   time_filter: str = "alltime") -> InlineKeyboardMarkup:
+    """
+    Global leaderboard keyboard.
+    Row 1: [Current Chat]  [🌍 Global ✅]
+    Row 2: [Today]  [Week]  [All Time ✅]
+    Row 3: [🎮 Play New Game]  (green)
+    """
+    today_lbl   = "📅 Today ✅"   if time_filter == "today"   else "📅 Today"
+    week_lbl    = "📆 Week ✅"    if time_filter == "week"    else "📆 Week"
+    alltime_lbl = "🏆 All Time ✅" if time_filter == "alltime" else "🏆 All Time"
+
     rows = [
         [
-            _cb("📍 Current Chat", "cb:leaderboard", style="primary"),
-            _cb("🌍 Global ✅",    "cb:globalboard", style="primary"),
+            _cb("📍 Current Chat",  "lb:chat:alltime"),
+            _cb("🌍 Global ✅",     "lb:global:alltime"),
         ],
         [
-            _cb("📅 Today",   "lb:today"),
-            _cb("📆 Week",    "lb:week"),
-            _cb("🏆 All Time","lb:alltime", style="success"),
+            _cb(today_lbl,   f"lb:global:{time_filter if time_filter=='today' else 'today'}"),
+            _cb(week_lbl,    f"lb:global:{time_filter if time_filter=='week' else 'week'}"),
+            _cb(alltime_lbl, "lb:global:alltime"),
         ],
         [
-            _cb("🎮 New Game", "theme:random", style="success"),
-            _cb("❓ Help",     "cb:help"),
+            _cb("🎮 Play New Game", "theme:random", style="success"),
         ],
     ]
-    if next_round > 0 and theme_key:
-        mode = "hard" if is_hard else "normal"
-        rows.append([
-            _cb(f"{_BTN_NEXT()} Start Round {next_round}",
-                f"nextround:{theme_key}:{next_round}:{mode}", style="danger"),
-        ])
     return InlineKeyboardMarkup(rows)
 
 
