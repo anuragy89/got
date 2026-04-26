@@ -34,7 +34,7 @@ from keyboards import (
     final_round_kb, leaderboard_kb, globalboard_kb, back_kb,
     round_mode_kb,
 )
-from puzzle import THEMES, THEME_LIST, build_grid, render_image
+from puzzle import THEMES, THEME_LIST, build_puzzle, render_image
 from render_cards import render_leaderboard, render_rank_tiers
 from strings import (
     start_private, start_group, new_group_welcome, help_text,
@@ -173,21 +173,26 @@ async def _launch_round(context: ContextTypes.DEFAULT_TYPE,
     duration, n_words, grid_size = get_level(round_num)
 
     if is_hard:
-        words = pick_hard_words(
+        from game import HARD_GRID_SIZE
+        grid_size = HARD_GRID_SIZE
+        raw_words = pick_hard_words(
             chat_id, theme_key, theme["words"],
             HARD_N_WORDS_MIN, HARD_N_WORDS_MAX,
         )
-        grid_size = 11
+        # Temporarily restrict pool so build_puzzle uses our word selection
+        original_words = theme["words"]
+        theme["words"] = raw_words
+        grid, words, placed = await _run_in_executor(
+            build_puzzle, theme_key, grid_size, len(raw_words)
+        )
+        theme["words"] = original_words
     else:
-        all_words = theme["words"]
-        words = random.sample(
-            [w for w in all_words if len(w) <= grid_size],
-            min(n_words, len(all_words)),
+        grid, words, placed = await _run_in_executor(
+            build_puzzle, theme_key, grid_size, n_words
         )
 
-    # Build grid & render image in thread pool (CPU-bound)
-    grid, placed = await _run_in_executor(build_grid, grid_size, words)
-    img_bytes    = await _run_in_executor(
+    # Render image in thread pool (CPU-bound)
+    img_bytes = await _run_in_executor(
         render_image, theme_key, grid, placed, [], round_num, grid_size
     )
 
