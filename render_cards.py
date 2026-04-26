@@ -1,8 +1,14 @@
 import io, math
 from PIL import Image, ImageDraw, ImageFont
 
-FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-FONT_REG  = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+FONT_BOLD = "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"
+FONT_REG  = "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"
+# Fallbacks in case Noto isn't installed
+import os as _os
+if not _os.path.exists(FONT_BOLD):
+    FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+if not _os.path.exists(FONT_REG):
+    FONT_REG  = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
 def font(path, size):
     try: return ImageFont.truetype(path, size)
@@ -272,13 +278,14 @@ def render_leaderboard(rows:list, title:str="Global Leaderboard") -> bytes:
 # Full 7-tier table used both for tier detection and the path row
 ME_TIERS = [
     # (min_words, tag, accent_hex, bg_hex, glow_hex, next_threshold_label)
-    (5000, "RUBY",     "#E8003A", "#2A0010", "#FF2060", "MAX"),
-    (3000, "GOLD",     "#FFD700", "#1A1400", "#FFF060", "5,000"),
-    (2500, "WORD GOD", "#D85A30", "#1A0A04", "#FF8050", "3,000"),
+    # Order: highest first (for detection logic), display reverses this to Bronze→…→Word God
+    (2500, "WORD GOD", "#D85A30", "#1A0A04", "#FF8050", "MAX"),
     (1001, "LEGEND",   "#7F77DD", "#0D0A20", "#AFA9EC", "2,500"),
     (501,  "DIAMOND",  "#378ADD", "#061428", "#85B7EB", "1,001"),
-    (201,  "SILVER",   "#B4B2A9", "#141412", "#D3D1C7", "501"),
-    (0,    "BRONZE",   "#EF9F27", "#180E00", "#FAC775", "201"),
+    (201,  "RUBY",     "#E8003A", "#2A0010", "#FF2060", "501"),
+    (101,  "GOLD",     "#FFD700", "#1A1400", "#FFF060", "201"),
+    (50,   "SILVER",   "#B4B2A9", "#141412", "#D3D1C7", "101"),
+    (0,    "BRONZE",   "#EF9F27", "#180E00", "#FAC775", "50"),
 ]
 
 # 12 per-user colour palettes — picked by user_id % 12
@@ -492,16 +499,22 @@ def render_me_card(
        fill=STAT_BG, outline=ACCENT, width=max(1, S//1))
     draw.text((NX + 12*S, PILL_Y + 6*S), rank_txt, fill=ACCENT_LIGHT, font=f_sub)
 
-    # Streak pill  ──  dark bg, orange/red border
+    # Streak pill  ──  dark bg, orange/red border + small orange dot
     STK_BG  = (22, 11, 2)
     STK_BD  = (210, 80, 40)
     STK_TXT = (255, 150, 80)
-    stk_txt  = f"🔥 {streak_days}  day streak"
+    stk_txt  = f"{streak_days}  day streak"
     stk_x    = NX + rk_w + 14*S
-    stk_w    = int(draw.textlength(stk_txt, font=f_sub)) + 24*S
+    dot_sz   = 8*S   # small circle diameter
+    stk_w    = dot_sz + 6*S + int(draw.textlength(stk_txt, font=f_sub)) + 24*S
     rr(draw, stk_x, PILL_Y, stk_w, PILL_H, PILL_H // 2,
        fill=STK_BG, outline=STK_BD, width=max(1, S//1))
-    draw.text((stk_x + 12*S, PILL_Y + 6*S), stk_txt, fill=STK_TXT, font=f_sub)
+    # Small orange dot (flame indicator)
+    dot_cx = stk_x + 12*S
+    dot_cy_center = PILL_Y + PILL_H // 2
+    draw.ellipse([dot_cx, dot_cy_center - dot_sz//2,
+                  dot_cx + dot_sz, dot_cy_center + dot_sz//2], fill=(255, 120, 40))
+    draw.text((dot_cx + dot_sz + 6*S, PILL_Y + 6*S), stk_txt, fill=STK_TXT, font=f_sub)
 
     # XP progress bar  ──  spans full width from NX to right edge
     XP_TOP = PILL_Y + PILL_H + 16*S
@@ -608,8 +621,8 @@ def render_me_card(
                       tag, fill=P_ACC, font=f_path)
         else:
             dim_bg  = tuple(max(0, c - 8) for c in CARD_BG)
-            dim_bdr = tuple(int(c * 0.22) for c in P_ACC)
-            dim_txt = tuple(int(c * 0.28) for c in P_ACC)
+            dim_bdr = tuple(int(c * 0.35) for c in P_ACC)
+            dim_txt = tuple(int(c * 0.55) for c in P_ACC)   # brighter — more readable
             rr(draw, px, TP_TOP, pill_w, pill_h, pill_h // 2,
                fill=dim_bg, outline=dim_bdr, width=1)
             tw2 = int(draw.textlength(tag, font=f_path))
@@ -662,21 +675,19 @@ def render_me_card(
         dx = dot_x0 + di * (dot_r*2 + dot_gap)
         dy = dot_cy - dot_r
         if di < played - 1:
-            fill_c = (216, 90, 48)
+            fill_c = (216, 90, 48)    # played days — orange
         elif di == played - 1:
-            # Today — brighter/highlighted
+            # Today — brightest
             draw.ellipse([dx - 2, dy - 2, dx + dot_r*2 + 2, dy + dot_r*2 + 2],
                          fill=(255, 160, 80))
             fill_c = (255, 200, 100)
         else:
-            fill_c = (35, 18, 5)
+            fill_c = (50, 28, 8)      # future — dark but not invisible
         draw.ellipse([dx, dy, dx + dot_r*2, dy + dot_r*2], fill=fill_c)
-        if di != played - 1:   # highlight already drawn above
-            pass
         dw2 = int(draw.textlength(day, font=f_streak_s))
-        txt_c = (255, 255, 255) if di < played else (70, 38, 12)
+        # Always white text — visible on both orange and dark circles
         draw.text((dx + dot_r - dw2 // 2, dot_cy - 7*S), day,
-                  fill=txt_c, font=f_streak_s)
+                  fill=(255, 255, 255), font=f_streak_s)
 
     # ──────────────────────────────────────────────────────────────
     #  FOOTER watermark
