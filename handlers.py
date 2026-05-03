@@ -887,11 +887,11 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         tfilter = parts[2] if len(parts) > 2 else "alltime"  # "today","week","alltime"
 
         if scope == "global":
-            rows  = await db.global_leaderboard(limit=15)
+            rows  = await db.global_leaderboard(limit=15, time_filter=tfilter)
             title = "🌍 Global Leaderboard"
             kb    = globalboard_kb(time_filter=tfilter)
         else:
-            rows  = await db.group_leaderboard(chat.id, limit=15)
+            rows  = await db.group_leaderboard(chat.id, limit=15, time_filter=tfilter)
             title = f"🏆 {chat.title or 'Group'} Leaderboard"
             kb    = leaderboard_kb(time_filter=tfilter)
 
