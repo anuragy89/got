@@ -1,5 +1,5 @@
 from motor.motor_asyncio import AsyncIOMotorClient
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from config import MONGO_URI, DB_NAME
 import logging
 
@@ -30,6 +30,9 @@ async def _indexes():
     )
     await db.global_lb.create_index("user_id", unique=True)
     await db.global_lb.create_index([("score", -1)])
+    # score_events: one doc per word-found event, used for today/week filtering
+    await db.score_events.create_index([("chat_id", 1), ("ts", -1)])
+    await db.score_events.create_index([("ts", -1)])
 
 
 # ── Users ────────────────────────────────────────────────────────
@@ -102,11 +105,28 @@ async def count_groups() -> int:
     return await db.groups.count_documents({"active": True})
 
 
+# ── Time-filter helper ───────────────────────────────────────────
+
+def _time_match(time_filter: str) -> dict:
+    """Return a MongoDB match fragment for today/week/alltime."""
+    now = datetime.now(timezone.utc)
+    if time_filter == "today":
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        return {"ts": {"$gte": start}}
+    if time_filter == "week":
+        # Monday 00:00 UTC of the current ISO week
+        start = (now - timedelta(days=now.weekday())).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        return {"ts": {"$gte": start}}
+    return {}   # alltime — no filter
+
+
 # ── Leaderboard ──────────────────────────────────────────────────
 
 async def add_score(chat_id: int, user_id: int, name: str, pts: int, words: int = 1,
                     username: str = None):
-    # Group board
+    # Group board (cumulative all-time)
     await db.leaderboard.update_one(
         {"chat_id": chat_id, "user_id": user_id},
         {
@@ -129,16 +149,77 @@ async def add_score(chat_id: int, user_id: int, name: str, pts: int, words: int 
         },
         upsert=True,
     )
+    # score_events — timestamped record for today/week filtering
+    event: dict = {
+        "chat_id":  chat_id,
+        "user_id":  user_id,
+        "name":     name,
+        "pts":      pts,
+        "words":    words,
+        "ts":       datetime.now(timezone.utc),
+    }
+    if username:
+        event["username"] = username
+    await db.score_events.insert_one(event)
 
 
-async def group_leaderboard(chat_id: int, limit: int = 10) -> list:
-    cur = db.leaderboard.find({"chat_id": chat_id}).sort("score", -1).limit(limit)
-    return [d async for d in cur]
+async def group_leaderboard(chat_id: int, limit: int = 10,
+                            time_filter: str = "alltime") -> list:
+    if time_filter == "alltime":
+        cur = db.leaderboard.find({"chat_id": chat_id}).sort("score", -1).limit(limit)
+        return [d async for d in cur]
+
+    match_q = {"chat_id": chat_id, **_time_match(time_filter)}
+    pipeline = [
+        {"$match": match_q},
+        {"$group": {
+            "_id":         "$user_id",
+            "name":        {"$last": "$name"},
+            "score":       {"$sum": "$pts"},
+            "words_found": {"$sum": "$words"},
+        }},
+        {"$sort": {"score": -1}},
+        {"$limit": limit},
+    ]
+    rows = []
+    async for d in db.score_events.aggregate(pipeline):
+        rows.append({
+            "user_id":     d["_id"],
+            "name":        d["name"],
+            "score":       d["score"],
+            "words_found": d["words_found"],
+        })
+    return rows
 
 
-async def global_leaderboard(limit: int = 10) -> list:
-    cur = db.global_lb.find().sort("score", -1).limit(limit)
-    return [d async for d in cur]
+async def global_leaderboard(limit: int = 10,
+                              time_filter: str = "alltime") -> list:
+    if time_filter == "alltime":
+        cur = db.global_lb.find().sort("score", -1).limit(limit)
+        return [d async for d in cur]
+
+    pipeline = [
+        {"$match": _time_match(time_filter)},
+        {"$group": {
+            "_id":         "$user_id",
+            "name":        {"$last": "$name"},
+            "username":    {"$last": "$username"},
+            "score":       {"$sum": "$pts"},
+            "words_found": {"$sum": "$words"},
+        }},
+        {"$sort": {"score": -1}},
+        {"$limit": limit},
+    ]
+    rows = []
+    async for d in db.score_events.aggregate(pipeline):
+        rows.append({
+            "user_id":     d["_id"],
+            "name":        d["name"],
+            "username":    d.get("username"),
+            "score":       d["score"],
+            "words_found": d["words_found"],
+        })
+    return rows
 
 
 async def user_global_stats(user_id: int) -> dict:
