@@ -179,9 +179,13 @@ def leaderboard_text(rows, title) -> str:
         return f"{ICO_TROPHY()} <b>{title}</b>\n\nNo scores yet — play /newgame to get started!"
     lines = [f"{ICO_TROPHY()} <b>{title}</b>", "━" * 26]
     for i, row in enumerate(rows):
-        med = MEDALS[i] if i < 3 else f"  {i+1}."
-        wf  = row.get("words_found", 0)
-        lines.append(f"{med} <b>{row['name']}</b> — {row['score']} pts <i>({wf} words)</i>")
+        med  = MEDALS[i] if i < 3 else f"  {i+1}."
+        wf   = row.get("words_found", 0)
+        uid  = row.get("user_id")
+        name = row.get("name", "Player")
+        # Tappable mention — works for every user regardless of username
+        mention = f'<a href="tg://user?id={uid}">{name}</a>' if uid else f"<b>{name}</b>"
+        lines.append(f"{med} {mention} — {row['score']} pts <i>({wf} words)</i>")
     return "\n".join(lines)
 
 def my_stats(first_name, doc) -> str:
