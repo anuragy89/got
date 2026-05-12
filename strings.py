@@ -78,6 +78,7 @@ def help_text() -> str:
         f"  /leaderboard — This group's top 10\n"
         f"  /globalboard — All-time global top 10\n"
         f"  /mystats — Your personal stats\n"
+        f"  /me — Your beautiful profile card\n"
         f"  /resetboard — Reset group board (admins)\n\n"
         f"{ICO_FIRE()} <b>20 Themes</b>\n"
         f"  animals • fruits • ocean • space • sports\n"
@@ -118,8 +119,7 @@ def game_start_caption(theme_name, theme_emoji, round_num, n_words, duration, gr
                 elif len(w) == 3:
                     masked = w[0] + " _ " + w[-1]
                 else:
-                    inner  = " ".join(["_"] * (len(w) - 2))
-                    masked = w[0] + " " + inner + " " + w[-1]
+                    masked = w[0] + " _" * (len(w) - 2) + " " + w[-1]
                 hint_lines.append(f"💡 <code>{masked}</code>  <i>({len(w)})</i>")
         return header + "\n".join(hint_lines)
 
@@ -150,38 +150,49 @@ MEDALS = ["🥇", "🥈", "🥉"]
 
 def round_end(summary, missed, theme_name, round_num, max_rounds, round_complete=False) -> str:
     is_final = (round_num >= max_rounds)
-    header = f"{ICO_CROWN()} <b>{'🏁 FINAL ' if is_final else ''}Round {round_num} Over! — {theme_name}</b>"
-    lines = [header, "━" * 26]
+
+    inner = []
+    inner.append(f"{ICO_CROWN()} <b>{'🏁 FINAL ' if is_final else ''}Round {round_num} Over!</b>  —  {theme_name}")
+    inner.append("━" * 24)
+
     if not summary:
-        lines.append("<i>No one scored this round!</i>")
+        inner.append("<i>No one scored this round!</i>")
     else:
         for i, row in enumerate(summary[:5]):
             med = MEDALS[i] if i < 3 else f"  {i+1}."
-            lines.append(f"{med} <b>{row['name']}</b> — {row['score']} pts  <i>({row['words']} words)</i>")
-        lines.append("")
-        lines.append(f"{ICO_TROPHY()} <b>Round winner: {summary[0]['name']}</b>  🎉")
+            inner.append(f"{med} <b>{row['name']}</b> — {row['score']} pts  <i>({row['words']} words)</i>")
+        inner.append("")
+        inner.append(f"{ICO_TROPHY()} <b>Round winner: {summary[0]['name']}</b>  \U0001f389")
+
     if missed:
-        lines.append("")
-        lines.append(f"{ICO_PUZZLE()} <b>Missed:</b> {', '.join(missed)}")
-    lines.append("")
+        inner.append("")
+        inner.append(f"{ICO_PUZZLE()} <b>Missed:</b> {', '.join(missed)}")
+
+    inner.append("")
     if is_final:
-        lines.append("🏁 <b>All 12 rounds complete! Great game!</b>")
-        lines.append("Type /newgame to start fresh.")
+        inner.append("\U0001f3c1 <b>All 12 rounds complete! Great game!</b>")
+        inner.append("Type /newgame to start fresh.")
     elif round_complete:
-        lines.append(f"{ICO_ROCKET()} <b>All words found!</b> Round {round_num + 1} starts automatically in 10s…")
+        inner.append(f"{ICO_ROCKET()} <b>All words found!</b> Round {round_num + 1} starts automatically in 10s\u2026")
     else:
-        lines.append(f"⏰ <b>Time's up!</b> Not all words were found.")
-        lines.append(f"Type /newgame to start a new game!")
-    return "\n".join(lines)
+        inner.append(f"\u23f0 <b>Time's up!</b> Not all words were found.")
+        inner.append("Type /newgame to start a new game!")
+
+    body = "\n".join(inner)
+    return f"<blockquote>{body}</blockquote>"
 
 def leaderboard_text(rows, title) -> str:
     if not rows:
         return f"{ICO_TROPHY()} <b>{title}</b>\n\nNo scores yet — play /newgame to get started!"
     lines = [f"{ICO_TROPHY()} <b>{title}</b>", "━" * 26]
     for i, row in enumerate(rows):
-        med = MEDALS[i] if i < 3 else f"  {i+1}."
-        wf  = row.get("words_found", 0)
-        lines.append(f"{med} <b>{row['name']}</b> — {row['score']} pts <i>({wf} words)</i>")
+        med  = MEDALS[i] if i < 3 else f"  {i+1}."
+        wf   = row.get("words_found", 0)
+        uid  = row.get("user_id")
+        name = row.get("name", "Player")
+        # Tappable mention — works for every user regardless of username
+        mention = f'<a href="tg://user?id={uid}">{name}</a>' if uid else f"<b>{name}</b>"
+        lines.append(f"{med} {mention} — {row['score']} pts <i>({wf} words)</i>")
     return "\n".join(lines)
 
 def my_stats(first_name, doc) -> str:
