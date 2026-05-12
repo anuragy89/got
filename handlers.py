@@ -1,839 +1,1045 @@
-"""
-handlers.py — All Telegram command, callback, message, and job handlers
-for WordGrid Bot.
-"""
-
 import asyncio
 import io
 import logging
 import random
-import time
-from concurrent.futures import ThreadPoolExecutor
-from typing import Optional
 
-from telegram import Update, InputMediaPhoto
-from telegram.constants import ChatAction, ParseMode
+from telegram import Update, InputMediaPhoto, InputMediaAnimation
+from telegram.constants import ParseMode, ChatType
+from telegram.error import TelegramError, Forbidden, BadRequest
 from telegram.ext import ContextTypes
 
+from countdown_gif import build_countdown_gif
+from render_cards import render_leaderboard, render_rank_tiers, render_me_card
 import database as db
-from config import (
-    OWNER_ID, COOLDOWN_SECONDS, MSG_DELETE_AFTER,
-    IDLE_NUDGE_AFTER, BROADCAST_DELAY,
-)
+from config import OWNER_ID, BROADCAST_DELAY, MSG_DELETE_AFTER, IDLE_NUDGE_AFTER
 from game import (
-    GameSession, SessionManager, sessions,
-    get_level, MAX_ROUNDS,
+    sessions, GameSession, get_level, MAX_ROUNDS,
     pick_random_theme, pick_next_round_theme,
     pick_hard_theme, pick_hard_words,
-    HARD_N_WORDS_MIN, HARD_N_WORDS_MAX,
+    HARD_GRID_SIZE, HARD_N_WORDS_MIN, HARD_N_WORDS_MAX,
+    HARD_POINTS_PER_WORD, HARD_FIRST_PTS,
     touch_activity, idle_seconds,
 )
 from keyboards import (
-    start_kb, theme_kb, game_action_kb, hard_action_kb,
-    word_found_kb, next_round_kb, round_over_no_next_kb,
-    final_round_kb, leaderboard_kb, globalboard_kb, back_kb,
-    round_mode_kb,
+    start_kb, theme_kb, game_action_kb, hard_action_kb, leaderboard_kb, globalboard_kb,
+    back_kb, next_round_kb, final_round_kb, round_over_no_next_kb,
+    word_found_kb, round_mode_kb, me_kb,
 )
-from puzzle import THEMES, THEME_LIST, build_puzzle, render_image
-from render_cards import render_leaderboard, render_rank_tiers
+from puzzle import build_puzzle, render_image, THEMES, THEME_LIST
 from strings import (
     start_private, start_group, new_group_welcome, help_text,
-    game_start_caption, word_found, hint_text, no_hint_text,
-    round_end, leaderboard_text, my_stats, bot_stats as fmt_bot_stats,
-    BROADCAST_USAGE, broadcast_done, IDLE_NUDGES,
+    game_start_caption, word_found, round_end,
+    leaderboard_text, my_stats, bot_stats,
+    BROADCAST_USAGE, broadcast_done,
+    hint_text, no_hint_text, IDLE_NUDGES,
+    ICO_FIRE, ICO_PUZZLE, ICO_TROPHY, ICO_STAR, ICO_CROWN, ICO_ROCKET,
 )
 
 log = logging.getLogger(__name__)
-_executor = ThreadPoolExecutor(max_workers=4)
+
+# ── Per-chat state for leaderboard next-round persistence ─────────
+# Stores (next_round, theme_key) after a completed round, cleared on new game
+_pending_next: dict[int, tuple] = {}
+
+# ── Per-chat end-round lock — prevents double "round over" messages ─
+# when two players find the last word at the exact same instant.
+_ending_round: set[int] = set()
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  HELPERS
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ── Helpers ───────────────────────────────────────────────────────
 
-def _spaced_hint(word: str) -> str:
-    """Return a hint with spaced underscores: A _ _ _ N (first + last letters shown)."""
-    if len(word) <= 1:
-        return word
-    if len(word) == 2:
-        return word[0] + " _"
-    if len(word) == 3:
-        return word[0] + " _ " + word[-1]
-    inner = " ".join(["_"] * (len(word) - 2))
-    return word[0] + " " + inner + " " + word[-1]
-
-
-async def _run_in_executor(func, *args):
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(_executor, func, *args)
-
-
-async def _safe_delete(bot, chat_id: int, msg_id: int):
+async def _is_admin(update, ctx):
+    if update.effective_user.id == OWNER_ID:
+        return True
     try:
-        await bot.delete_message(chat_id=chat_id, message_id=msg_id)
-    except Exception:
-        pass
-
-
-async def _schedule_cleanup(bot, chat_id: int, msg_ids: list, delay: int):
-    """Delete all listed messages after `delay` seconds."""
-    if not delay or not msg_ids:
-        return
-    await asyncio.sleep(delay)
-    for mid in msg_ids:
-        await _safe_delete(bot, chat_id, mid)
-
-
-async def _end_round(context: ContextTypes.DEFAULT_TYPE, chat_id: int,
-                     s: GameSession, reason: str = "timeout"):
-    """
-    Finalise a round: update DB, send summary, schedule cleanup.
-    reason: "timeout" | "complete" | "endgame"
-    """
-    if not s.active:
-        return
-    s.active = False
-    sessions.remove(chat_id)
-    touch_activity(chat_id)
-
-    summary = s.summary()
-    missed  = [w for w in s.words if w not in s.found_words]
-    theme   = THEMES[s.theme]
-    round_complete = (reason == "complete")
-
-    # Persist scores
-    for row in summary:
-        await db.add_score(
-            chat_id, row["user_id"], row["name"],
-            row["score"], row["words"],
-            username=row.get("username"),
-        )
-
-    is_final   = (s.round_num >= MAX_ROUNDS) or s.is_hard
-    next_round = s.round_num + 1
-
-    if is_final:
-        kb = final_round_kb()
-    elif round_complete:
-        kb = next_round_kb(next_round, s.theme, s.is_hard)
-    else:
-        kb = round_over_no_next_kb()
-
-    text = round_end(
-        summary, missed, theme["name"],
-        s.round_num, MAX_ROUNDS,
-        round_complete=round_complete,
-    )
-    msg = await context.bot.send_message(
-        chat_id=chat_id, text=text,
-        parse_mode=ParseMode.HTML,
-        reply_markup=kb,
-    )
-
-    # Auto-advance in auto mode when all words found and not final
-    if round_complete and not is_final and s.round_mode == "auto":
-        asyncio.create_task(
-            _auto_next_round(context, chat_id, s, next_round)
-        )
-
-    # Schedule cleanup
-    all_ids = list(s.msg_ids) + [msg.message_id]
-    if MSG_DELETE_AFTER:
-        asyncio.create_task(
-            _schedule_cleanup(context.bot, chat_id, all_ids, MSG_DELETE_AFTER)
-        )
-
-    sessions.set_cooldown(chat_id, COOLDOWN_SECONDS)
-
-
-async def _auto_next_round(context: ContextTypes.DEFAULT_TYPE, chat_id: int,
-                            prev: GameSession, next_round: int):
-    """Wait 10 s then start the next round automatically."""
-    await asyncio.sleep(10)
-    if sessions.active(chat_id):
-        return   # someone started a game manually in the gap
-    next_theme = pick_next_round_theme(chat_id, prev.theme, THEME_LIST)
-    await _launch_round(
-        context, chat_id,
-        theme_key=next_theme,
-        round_num=next_round,
-        is_hard=prev.is_hard,
-        round_mode=prev.round_mode,
-    )
-
-
-async def _launch_round(context: ContextTypes.DEFAULT_TYPE,
-                        chat_id: int,
-                        theme_key: str,
-                        round_num: int,
-                        is_hard: bool = False,
-                        round_mode: str = "auto"):
-    """Build grid, render image, send to group and set up timer."""
-    theme = THEMES[theme_key]
-    duration, n_words, grid_size = get_level(round_num)
-
-    if is_hard:
-        from game import HARD_GRID_SIZE
-        grid_size = HARD_GRID_SIZE
-        raw_words = pick_hard_words(
-            chat_id, theme_key, theme["words"],
-            HARD_N_WORDS_MIN, HARD_N_WORDS_MAX,
-        )
-        # Temporarily restrict pool so build_puzzle uses our word selection
-        original_words = theme["words"]
-        theme["words"] = raw_words
-        grid, words, placed = await _run_in_executor(
-            build_puzzle, theme_key, grid_size, len(raw_words)
-        )
-        theme["words"] = original_words
-    else:
-        grid, words, placed = await _run_in_executor(
-            build_puzzle, theme_key, grid_size, n_words
-        )
-
-    # Render image in thread pool (CPU-bound)
-    img_bytes = await _run_in_executor(
-        render_image, theme_key, grid, placed, [], round_num, grid_size
-    )
-
-    s = GameSession(
-        chat_id=chat_id,
-        theme=theme_key,
-        grid=grid,
-        words=words,
-        placed=placed,
-        round_num=round_num,
-        img_bytes=img_bytes,
-        is_hard=is_hard,
-        round_mode=round_mode,
-    )
-    sessions.put(s)
-    touch_activity(chat_id)
-
-    caption = game_start_caption(
-        theme["name"], theme["emoji"],
-        round_num, len(words), s.duration, grid_size,
-        words=words, found_words=[],
-    )
-    kb = hard_action_kb() if is_hard else game_action_kb()
-
-    photo_msg = await context.bot.send_photo(
-        chat_id=chat_id,
-        photo=io.BytesIO(img_bytes),
-        caption=caption,
-        parse_mode=ParseMode.HTML,
-        reply_markup=kb,
-    )
-    s.grid_msg_id = photo_msg.message_id
-    s.msg_ids.append(photo_msg.message_id)
-
-    # Set timer task
-    s._task = asyncio.create_task(_round_timer(context, chat_id, s))
-
-
-async def _round_timer(context: ContextTypes.DEFAULT_TYPE,
-                       chat_id: int, s: GameSession):
-    await asyncio.sleep(s.duration)
-    if s.active:
-        await _end_round(context, chat_id, s, reason="timeout")
-
-
-async def _is_admin(update: Update) -> bool:
-    """Check if the command sender is a group admin or creator."""
-    try:
-        member = await update.effective_chat.get_member(update.effective_user.id)
-        return member.status in ("administrator", "creator")
+        from telegram import ChatMemberAdministrator, ChatMemberOwner
+        m = await ctx.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
+        return isinstance(m, (ChatMemberAdministrator, ChatMemberOwner))
     except Exception:
         return False
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  COMMAND HANDLERS
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    await db.upsert_user(user)
-
-    if update.effective_chat.type == "private":
-        await update.message.reply_text(
-            start_private(user.first_name),
-            parse_mode=ParseMode.HTML,
-            reply_markup=start_kb(),
-        )
-    else:
-        await update.message.reply_text(
-            start_group(),
-            parse_mode=ParseMode.HTML,
-        )
-
-
-async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        help_text(),
-        parse_mode=ParseMode.HTML,
-    )
+async def _safe_edit_text(q, text, parse_mode=ParseMode.HTML, reply_markup=None):
+    try:
+        await q.edit_message_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+    except BadRequest as e:
+        err = str(e).lower()
+        if "there is no text in the message" in err:
+            try:
+                await q.delete_message()
+            except TelegramError:
+                pass
+            try:
+                await q.message.chat.send_message(text, parse_mode=parse_mode, reply_markup=reply_markup)
+            except TelegramError:
+                pass
+        elif "message is not modified" in err:
+            pass
+        else:
+            log.warning(f"edit_message_text failed: {e}")
 
 
-async def cmd_theme(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🎨 <b>Choose a theme for your next game:</b>",
-        parse_mode=ParseMode.HTML,
-        reply_markup=theme_kb(),
-    )
-
-
-async def cmd_newgame(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-
-    if update.effective_chat.type == "private":
-        await update.message.reply_text(
-            "➕ Add me to a group to play! Use the button below.",
-            reply_markup=start_kb(),
-        )
+async def _delete_messages_later(bot, chat_id: int, msg_ids: list, delay: int):
+    """Wait delay seconds then silently delete all listed message IDs."""
+    if not msg_ids or delay <= 0:
         return
+    await asyncio.sleep(delay)
+    for mid in msg_ids:
+        try:
+            await bot.delete_message(chat_id, mid)
+        except TelegramError:
+            pass
+        await asyncio.sleep(0.05)
 
-    if sessions.active(chat_id):
-        await update.message.reply_text("⚠️ A game is already running! Use /endgame to stop it.")
+
+def _build_hint_text(session) -> str:
+    """Build the full hint message for all unfound words, filling in found ones."""
+    lines = []
+    for w in session.words:
+        if w in session.found_words:
+            lines.append(f"✅ <b>{w}</b> — found!")
+        else:
+            lines.append(hint_text(session.get_hint(w), len(w)))
+    return "\n\n".join(lines)
+
+
+# ── Core round logic ──────────────────────────────────────────────
+
+async def _end_round(chat_id, session, ctx, from_timer=False):
+    # ── Race-condition guard: only one coroutine may end this round ──
+    if chat_id in _ending_round:
         return
+    _ending_round.add(chat_id)
 
-    if sessions.cooldown(chat_id):
-        left = sessions.cooldown_left(chat_id)
-        await update.message.reply_text(f"⏳ Please wait {left}s before starting a new game.")
-        return
+    try:
+        if not session.active:
+            return
+        session.active = False
 
-    # Optional theme argument
-    args = context.args
-    if args:
-        theme_key = args[0].lower()
-        if theme_key not in THEMES:
-            await update.message.reply_text(
-                f"❓ Unknown theme <code>{theme_key}</code>. Use /theme to see all themes.",
+        summary        = session.summary()
+        missed         = [w for w in session.words if w not in session.found_words]
+        is_final       = session.round_num >= MAX_ROUNDS
+        round_complete = session.complete()
+
+        for row in summary:
+            await db.add_score(chat_id, row["user_id"], row["name"], row["score"], row["words"])
+
+        next_theme     = (
+            pick_next_round_theme(chat_id, session.theme, THEME_LIST)
+            if not is_final else session.theme
+        )
+        next_round_num = session.round_num + 1
+
+        text = round_end(
+            summary, missed, THEMES[session.theme]["name"],
+            session.round_num, MAX_ROUNDS,
+            round_complete=round_complete,
+        )
+
+        # ── Choose keyboard ──────────────────────────────────────────
+        # Manual mode: show "▶️ Start Round N" button
+        # Auto mode: no next-round button, auto-starts after countdown
+        is_manual = getattr(session, 'round_mode', 'auto') == 'manual'
+        is_hard   = getattr(session, 'is_hard', False)
+
+        if is_final:
+            kb = final_round_kb()
+            _pending_next.pop(chat_id, None)
+        elif round_complete and is_manual:
+            kb = next_round_kb(next_round_num, next_theme, is_hard=is_hard)
+            _pending_next[chat_id] = (next_round_num, next_theme, is_hard)
+        else:
+            kb = round_over_no_next_kb()
+            if round_complete:
+                _pending_next[chat_id] = (next_round_num, next_theme, is_hard)
+            else:
+                _pending_next.pop(chat_id, None)
+
+        all_msg_ids = []
+        if session.grid_msg_id:
+            all_msg_ids.append(session.grid_msg_id)
+        all_msg_ids.extend(session.msg_ids)
+
+        try:
+            await ctx.bot.send_message(chat_id, text, parse_mode=ParseMode.HTML, reply_markup=kb)
+        except TelegramError:
+            pass
+
+        touch_activity(chat_id)
+        sessions.remove(chat_id)
+
+        if all_msg_ids and MSG_DELETE_AFTER > 0:
+            asyncio.create_task(
+                _delete_messages_later(ctx.bot, chat_id, all_msg_ids, MSG_DELETE_AFTER)
+            )
+
+        # ── Auto-start next round after 10-second countdown (auto mode only) ──
+        if round_complete and not is_final and not is_manual:
+            asyncio.create_task(
+                _auto_next_round(chat_id, next_round_num, next_theme, ctx, is_hard=is_hard)
+            )
+    finally:
+        _ending_round.discard(chat_id)
+
+
+async def _auto_next_round(chat_id: int, next_round: int, theme_key: str, ctx,
+                           is_hard: bool = False):
+    """
+    Send an animated digital-clock GIF countdown (10→1) as a single
+    Telegram animation message, then auto-launch the next round.
+    The GIF itself animates — no message editing needed.
+    """
+    theme_emoji = THEMES.get(theme_key, {}).get("emoji", "🎮")
+    theme_name  = THEMES.get(theme_key, {}).get("name", "")
+
+    loop = asyncio.get_event_loop()
+    try:
+        gif_bytes = await loop.run_in_executor(None, build_countdown_gif)
+    except Exception as e:
+        log.error(f"build_countdown_gif failed: {e}")
+        gif_bytes = None
+
+    countdown_msg = None
+    if gif_bytes:
+        try:
+            countdown_msg = await ctx.bot.send_animation(
+                chat_id,
+                animation=io.BytesIO(gif_bytes),
+                caption=f"🎮 <b>Round {next_round}</b>  ·  {theme_emoji} {theme_name}\n<i>Next round starting…</i>",
+                parse_mode=ParseMode.HTML,
+                width=400,
+                height=160,
+            )
+        except TelegramError as e:
+            log.warning(f"send_animation failed: {e}")
+            countdown_msg = None
+
+    # If GIF failed, fall back to a plain text countdown
+    if not countdown_msg:
+        try:
+            countdown_msg = await ctx.bot.send_message(
+                chat_id,
+                f"⏱ <b>Round {next_round}</b> starts in <b>10s</b>…",
                 parse_mode=ParseMode.HTML,
             )
-            return
-    else:
-        theme_key = None  # will ask for mode, then pick
+        except TelegramError:
+            pass
 
-    # Ask for round mode
-    msg = await update.message.reply_text(
-        "🚀 <b>Choose round progression mode:</b>\n\n"
-        "• <b>Automatic</b> — next round starts automatically when all words found\n"
-        "• <b>Manual</b> — you decide when to start each round",
+    # Wait for the GIF to finish playing (10 s × 1 s/frame)
+    await asyncio.sleep(10)
+
+    # Abort if a game started manually during the countdown
+    if sessions.active(chat_id):
+        if countdown_msg:
+            try:
+                await ctx.bot.delete_message(chat_id, countdown_msg.message_id)
+            except TelegramError:
+                pass
+        return
+
+    if countdown_msg:
+        try:
+            await ctx.bot.delete_message(chat_id, countdown_msg.message_id)
+        except TelegramError:
+            pass
+
+    if sessions.active(chat_id) or sessions.cooldown(chat_id):
+        return
+
+    if is_hard:
+        await _launch_hard(chat_id, ctx=ctx, round_mode="auto")
+    else:
+        await _launch(chat_id, theme_key, round_num=next_round, ctx=ctx, round_mode="auto")
+
+
+async def _timer_task(chat_id, session, ctx):
+    warn_after = session.duration - 15
+    if warn_after > 0:
+        await asyncio.sleep(warn_after)
+        if not session.active:
+            return
+        try:
+            warn_msg = await ctx.bot.send_message(
+                chat_id,
+                f"{ICO_FIRE()} <b>15 seconds left!</b> Find more words fast!",
+                parse_mode=ParseMode.HTML,
+            )
+            session.msg_ids.append(warn_msg.message_id)
+        except TelegramError:
+            pass
+        await asyncio.sleep(15)
+    else:
+        await asyncio.sleep(session.duration)
+    if session.active:
+        await _end_round(chat_id, session, ctx, from_timer=True)
+
+
+async def _launch(chat_id, theme_key, round_num, ctx, round_mode: str = "auto"):
+    duration, n_words, grid_size = get_level(round_num)
+    t = THEMES[theme_key]
+
+    loop = asyncio.get_event_loop()
+    try:
+        grid, words, placed = await loop.run_in_executor(
+            None, build_puzzle, theme_key, grid_size, n_words
+        )
+    except Exception as e:
+        log.error(f"_launch build_puzzle failed chat={chat_id} theme={theme_key}: {e}")
+        try:
+            await ctx.bot.send_message(
+                chat_id,
+                "⚠️ Couldn't generate puzzle. Please try /newgame again!",
+                parse_mode=ParseMode.HTML,
+            )
+        except TelegramError:
+            pass
+        return
+
+    try:
+        img = await loop.run_in_executor(
+            None, render_image, theme_key, grid, placed, [], round_num, grid_size
+        )
+    except Exception as e:
+        log.error(f"_launch render_image failed chat={chat_id}: {e}")
+        try:
+            await ctx.bot.send_message(
+                chat_id,
+                "⚠️ Couldn't render grid image. Please try /newgame again!",
+                parse_mode=ParseMode.HTML,
+            )
+        except TelegramError:
+            pass
+        return
+
+    session = GameSession(chat_id, theme_key, grid, words, placed, round_num, img,
+                          round_mode=round_mode)
+    sessions.put(session)
+    touch_activity(chat_id)
+    _pending_next.pop(chat_id, None)
+
+    caption = game_start_caption(t["name"], t["emoji"], round_num, len(words), duration, grid_size,
+                                 words=words, found_words=[])
+    try:
+        msg = await ctx.bot.send_photo(
+            chat_id, photo=io.BytesIO(img),
+            caption=caption, parse_mode=ParseMode.HTML,
+            reply_markup=game_action_kb(),
+        )
+        session.grid_msg_id = msg.message_id
+    except TelegramError as e:
+        log.error(f"send_photo failed {chat_id}: {e}")
+        sessions.remove(chat_id)
+        return
+
+    session._task = asyncio.create_task(_timer_task(chat_id, session, ctx))
+
+
+# ── Commands ──────────────────────────────────────────────────────
+
+async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    chat = update.effective_chat
+    await db.upsert_user(user)
+    if chat.type == ChatType.PRIVATE:
+        BANNER_URL = "https://ibb.co/JjJrTmBt"
+        caption    = start_private(user.first_name)
+        # Send as ONE message: image + caption + buttons (clean, compact, like screenshot 2).
+        # Caption is kept under 1024 chars and has no box-drawing chars inside HTML tags.
+        try:
+            await update.message.reply_photo(
+                photo=BANNER_URL,
+                caption=caption,
+                parse_mode=ParseMode.HTML,
+                reply_markup=start_kb(),
+            )
+        except TelegramError as e:
+            log.warning(f"reply_photo failed in /start: {e} — falling back to text only")
+            # Fallback: text + buttons without image
+            await update.message.reply_text(
+                caption, parse_mode=ParseMode.HTML, reply_markup=start_kb()
+            )
+    else:
+        await db.upsert_group(chat)
+        await update.message.reply_text(start_group(), parse_mode=ParseMode.HTML)
+
+
+async def on_my_chat_member(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    result = update.my_chat_member
+    if not result:
+        return
+    status = result.new_chat_member.status
+    chat   = update.effective_chat
+    if status in ("member", "administrator"):
+        await db.upsert_group(chat)
+        try:
+            await ctx.bot.send_message(
+                chat.id, new_group_welcome(chat.title or "the group"),
+                parse_mode=ParseMode.HTML, reply_markup=game_action_kb(),
+            )
+        except TelegramError as e:
+            log.warning(f"Welcome failed {chat.id}: {e}")
+    elif status in ("left", "kicked"):
+        await db.mark_group_inactive(chat.id)
+
+
+async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(help_text(), parse_mode=ParseMode.HTML, reply_markup=back_kb())
+
+
+async def cmd_theme(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        f"{ICO_PUZZLE()} <b>Choose a theme:</b>", parse_mode=ParseMode.HTML, reply_markup=theme_kb()
+    )
+
+
+async def cmd_newgame(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    user = update.effective_user
+    if chat.type == ChatType.PRIVATE:
+        await update.message.reply_text(
+            f"{ICO_PUZZLE()} Add me to a group to play!", parse_mode=ParseMode.HTML, reply_markup=start_kb()
+        )
+        return
+    await db.upsert_user(user)
+    await db.upsert_group(chat)
+    if sessions.active(chat.id):
+        await update.message.reply_text(f"{ICO_FIRE()} A game is already running!", parse_mode=ParseMode.HTML)
+        return
+    args      = ctx.args or []
+    arg       = args[0].lower() if args else "random"
+    theme_key = arg if arg in THEMES else pick_random_theme(chat.id, THEME_LIST)
+    # Store chosen theme for when mode is selected
+    ctx.chat_data["pending_theme"] = theme_key
+    await update.message.reply_text(
+        f"{ICO_ROCKET()} <b>Choose round progression mode:</b>\n\n"
+        f"🚀 <b>Automatic</b> — next round starts automatically after 10s\n"
+        f"🕹️ <b>Manual</b> — you press the button to start each round",
         parse_mode=ParseMode.HTML,
         reply_markup=round_mode_kb("normal"),
     )
-    # Store theme choice in bot_data temporarily
-    context.bot_data[f"pending_theme:{chat_id}"] = theme_key
 
 
-async def cmd_newhard(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
+async def _launch_hard(chat_id: int, ctx, round_mode: str = "auto") -> None:
+    """Start a single /newhard session — 11x11 grid, 10-15 words, high pts."""
+    from puzzle import render_image as _render_image, _place, _empty, _fill
 
-    if update.effective_chat.type == "private":
-        await update.message.reply_text("➕ Add me to a group to play!")
+    theme_key = pick_hard_theme(chat_id, THEME_LIST)
+    t         = THEMES[theme_key]
+
+    # Pick non-repeating word subset (3+ letters, 10-15 words)
+    hard_words = pick_hard_words(
+        chat_id, theme_key, t["words"],
+        HARD_N_WORDS_MIN, HARD_N_WORDS_MAX,
+    )
+
+    loop = asyncio.get_event_loop()
+
+    def _build():
+        import random as _rand
+        # Try up to 5 times to place at least HARD_N_WORDS_MIN words
+        best_grid, best_chosen, best_placed = None, [], []
+        for attempt in range(5):
+            grid   = _empty(HARD_GRID_SIZE)
+            placed = []
+            chosen = []
+            for w in _rand.sample(hard_words, len(hard_words)):
+                cells = _place(grid, w, HARD_GRID_SIZE)
+                if cells:
+                    chosen.append(w)
+                    placed.append({"word": w, "cells": cells})
+            if len(chosen) > len(best_chosen):
+                best_grid, best_chosen, best_placed = grid, chosen, placed
+            if len(chosen) >= HARD_N_WORDS_MIN:
+                break
+        if not best_chosen:
+            raise ValueError("Hard puzzle: couldn't place any words")
+        _fill(best_grid, HARD_GRID_SIZE)
+        return best_grid, best_chosen, best_placed
+
+    try:
+        grid, words, placed = await loop.run_in_executor(None, _build)
+    except ValueError as e:
+        log.error(f"_launch_hard: {e}")
+        try:
+            await ctx.bot.send_message(
+                chat_id, "Could not generate hard puzzle. Try /newhard again!",
+                parse_mode=ParseMode.HTML,
+            )
+        except TelegramError:
+            pass
         return
 
-    if sessions.active(chat_id):
-        await update.message.reply_text("⚠️ A game is already running! Use /endgame to stop it.")
+    img = await loop.run_in_executor(
+        None, _render_image, theme_key, grid, placed, [], 1, HARD_GRID_SIZE,
+    )
+
+    session = GameSession(chat_id, theme_key, grid, words, placed,
+                          round_num=1, img_bytes=img, is_hard=True, round_mode=round_mode)
+    sessions.put(session)
+    touch_activity(chat_id)
+    _pending_next.pop(chat_id, None)
+
+    caption = game_start_caption(
+        t["name"], t["emoji"], 1, len(words), session.duration, HARD_GRID_SIZE,
+        words=words, found_words=[],
+    )
+    caption = "🔥 <b>HARD MODE</b> — " + caption[caption.index("<b>Round"):]
+
+    try:
+        msg = await ctx.bot.send_photo(
+            chat_id, photo=io.BytesIO(img),
+            caption=caption, parse_mode=ParseMode.HTML,
+            reply_markup=hard_action_kb(),
+        )
+        session.grid_msg_id = msg.message_id
+    except TelegramError as e:
+        log.error(f"send_photo (hard) failed {chat_id}: {e}")
+        sessions.remove(chat_id)
         return
 
-    if sessions.cooldown(chat_id):
-        left = sessions.cooldown_left(chat_id)
-        await update.message.reply_text(f"⏳ Please wait {left}s before starting a new game.")
-        return
+    session._task = asyncio.create_task(_timer_task(chat_id, session, ctx))
 
-    msg = await update.message.reply_text(
-        "🔥 <b>HARD MODE — Choose round progression:</b>",
+
+async def cmd_newhard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Start a Hard Mode game — /newhard"""
+    chat = update.effective_chat
+    user = update.effective_user
+    if chat.type == ChatType.PRIVATE:
+        await update.message.reply_text(
+            f"{ICO_PUZZLE()} Add me to a group to play Hard Mode!",
+            parse_mode=ParseMode.HTML, reply_markup=start_kb(),
+        )
+        return
+    await db.upsert_user(user)
+    await db.upsert_group(chat)
+    if sessions.active(chat.id):
+        await update.message.reply_text(
+            f"{ICO_FIRE()} A game is already running!", parse_mode=ParseMode.HTML
+        )
+        return
+    await update.message.reply_text(
+        f"{ICO_FIRE()} <b>🔥 HARD MODE — Choose round progression:</b>\n\n"
+        f"🚀 <b>Automatic</b> — next hard round starts automatically after 10s\n"
+        f"🕹️ <b>Manual</b> — you press the button to start each hard round",
         parse_mode=ParseMode.HTML,
         reply_markup=round_mode_kb("hard"),
     )
 
 
-async def cmd_hint(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /hint — reveal first+last letter hints for all unfound words.
-    Format: A _ _ _ N  (spaced underscores)
-    """
-    chat_id = update.effective_chat.id
-    s = sessions.get(chat_id)
-
-    if not s or not s.active:
-        await update.message.reply_text("💡 No active game. Start one with /newgame!")
+async def cmd_hint(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    if chat.type == ChatType.PRIVATE:
+        await update.message.reply_text("Hints only work during a group game!")
         return
-
-    unfound = [w for w in s.words if w not in s.found_words]
+    session = sessions.get(chat.id)
+    if not session or not session.active:
+        await update.message.reply_text("No active game to hint!")
+        return
+    unfound = [w for w in session.words if w not in session.found_words]
     if not unfound:
-        msg = await update.message.reply_text(no_hint_text(), parse_mode=ParseMode.HTML)
-        s.msg_ids.append(msg.message_id)
+        await update.message.reply_text(no_hint_text(), parse_mode=ParseMode.HTML)
         return
 
-    lines = []
-    for w in unfound:
-        hint = _spaced_hint(w)
-        lines.append(f"💡 <code>{hint}</code>  <i>({len(w)} letters)</i>")
+    hint_body = _build_hint_text(session)
 
-    text = "💡 <b>Hints for remaining words:</b>\n\n" + "\n".join(lines)
+    if session.hint_msg_id:
+        # Try to update existing hint message
+        try:
+            await ctx.bot.edit_message_text(
+                chat_id=chat.id, message_id=session.hint_msg_id,
+                text=hint_body, parse_mode=ParseMode.HTML,
+            )
+            return
+        except TelegramError:
+            pass  # fall through to send new one
 
-    # Delete previous hint message to keep chat clean
-    if s.hint_msg_id:
-        await _safe_delete(context.bot, chat_id, s.hint_msg_id)
-
-    msg = await update.message.reply_text(text, parse_mode=ParseMode.HTML)
-    s.hint_msg_id = msg.message_id
-    s.msg_ids.append(msg.message_id)
+    # Send fresh hint message
+    hint_msg = await update.message.reply_text(hint_body, parse_mode=ParseMode.HTML)
+    session.hint_msg_id = hint_msg.message_id
+    session.msg_ids.append(hint_msg.message_id)
 
 
-async def cmd_endgame(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-
-    if not await _is_admin(update) and update.effective_user.id != OWNER_ID:
-        await update.message.reply_text("🚫 Only admins can end the game.")
+async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    if not msg or not msg.text:
         return
-
-    s = sessions.get(chat_id)
-    if not s or not s.active:
-        await update.message.reply_text("No active game to end.")
-        return
-
-    await _end_round(context, chat_id, s, reason="endgame")
-
-
-async def cmd_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    rows = await db.group_leaderboard(chat_id)
-
-    if rows:
-        img_bytes = await _run_in_executor(
-            render_leaderboard, rows, f"{update.effective_chat.title} Leaderboard"
-        )
-        await update.message.reply_photo(
-            photo=io.BytesIO(img_bytes),
-            caption=leaderboard_text(rows, f"{update.effective_chat.title} — Top Players"),
-            parse_mode=ParseMode.HTML,
-            reply_markup=leaderboard_kb(),
-        )
-    else:
-        await update.message.reply_text(
-            leaderboard_text([], "Leaderboard"),
-            parse_mode=ParseMode.HTML,
-            reply_markup=leaderboard_kb(),
-        )
-
-
-async def cmd_globalboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    rows = await db.global_leaderboard()
-
-    if rows:
-        img_bytes = await _run_in_executor(
-            render_leaderboard, rows, "Global Leaderboard"
-        )
-        await update.message.reply_photo(
-            photo=io.BytesIO(img_bytes),
-            caption=leaderboard_text(rows, "🌍 Global Top Players"),
-            parse_mode=ParseMode.HTML,
-            reply_markup=globalboard_kb(),
-        )
-    else:
-        await update.message.reply_text(
-            leaderboard_text([], "Global Leaderboard"),
-            parse_mode=ParseMode.HTML,
-            reply_markup=globalboard_kb(),
-        )
-
-
-async def cmd_mystats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
     user = update.effective_user
-    doc  = await db.user_global_stats(user.id)
+    if chat.type == ChatType.PRIVATE:
+        return
+    session = sessions.get(chat.id)
+    if not session or not session.active:
+        return
+    word = msg.text.strip().upper()
+    if len(word) < 3 or not word.isalpha():
+        return
+
+    if session.valid_guess(word):
+        name  = user.first_name or user.username or "Player"
+        pts   = session.register(word, user.id, name)
+        left  = len(session.words) - len(session.found_words)
+        combo = session.p_combos.get(user.id, 1)
+        await db.upsert_user(user)
+
+        loop    = asyncio.get_event_loop()
+        new_img = await loop.run_in_executor(
+            None, render_image, session.theme, session.grid, session.placed,
+            session.found_words, session.round_num, session.grid_size,
+        )
+        session.img_bytes = new_img
+
+        # FIX #2 — pass chat info so word_found_kb builds a real URL button
+        # that Telegram scrolls straight to the grid message.
+        kb = word_found_kb(
+            session.grid_msg_id,
+            chat_username=getattr(chat, "username", None),
+            chat_id_int=chat.id,
+        ) if session.grid_msg_id else None
+        reply = await msg.reply_text(
+            word_found(name, word, pts, combo, left),
+            parse_mode=ParseMode.HTML,
+            reply_markup=kb,
+        )
+        # NOTE: word-found score messages are intentionally NOT added to
+        # session.msg_ids so they are never auto-deleted after the round.
+
+        # Update grid image caption (inline hints refresh + hard mode badge)
+        if session.grid_msg_id:
+            try:
+                t           = THEMES[session.theme]
+                new_caption = game_start_caption(
+                    t["name"], t["emoji"], session.round_num,
+                    len(session.words), session.duration, session.grid_size,
+                    words=session.words, found_words=session.found_words,
+                )
+                if session.is_hard:
+                    new_caption = f"🔥 <b>HARD MODE</b> — {new_caption[new_caption.index('<b>Round'):]}"
+                await ctx.bot.edit_message_media(
+                    chat_id=chat.id, message_id=session.grid_msg_id,
+                    media=InputMediaPhoto(
+                        media=io.BytesIO(new_img),
+                        caption=new_caption,
+                        parse_mode=ParseMode.HTML,
+                    ),
+                )
+            except (TelegramError, BadRequest):
+                pass
+
+        if session.complete():
+            if session._task:
+                session._task.cancel()
+            # _end_round has its own lock so double-triggers are safe
+            await _end_round(chat.id, session, ctx)
+
+    elif session.already_found(word):
+        session.reset_combo(user.id)
+        reply = await msg.reply_text(f"❌ <code>{word}</code> was already found!", parse_mode=ParseMode.HTML)
+        session.msg_ids.append(reply.message_id)
+
+
+async def cmd_leaderboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    if chat.type == ChatType.PRIVATE:
+        rows  = await db.global_leaderboard(limit=15)
+        title = "🌍 Global Leaderboard"
+        kb    = globalboard_kb()
+    else:
+        rows  = await db.group_leaderboard(chat.id, limit=15)
+        title = f"🏆 {chat.title or 'Group Leaderboard'}"
+        kb    = leaderboard_kb()
     await update.message.reply_text(
-        my_stats(user.first_name, doc),
-        parse_mode=ParseMode.HTML,
+        leaderboard_text(rows, title), parse_mode=ParseMode.HTML, reply_markup=kb
     )
 
 
-async def cmd_resetboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await _is_admin(update) and update.effective_user.id != OWNER_ID:
-        await update.message.reply_text("🚫 Only admins can reset the leaderboard.")
+async def cmd_globalboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    chat    = update.effective_chat
+    rows    = await db.global_leaderboard()
+    pending = _pending_next.get(chat.id)
+    if pending and len(pending) == 3:
+        nr, tk, ih = pending
+    elif pending:
+        nr, tk = pending; ih = False
+    else:
+        nr, tk, ih = 0, "", False
+    kb = globalboard_kb(next_round=nr, theme_key=tk, is_hard=ih)
+    await update.message.reply_text(
+        leaderboard_text(rows, "🌍 Global Leaderboard"),
+        parse_mode=ParseMode.HTML, reply_markup=kb,
+    )
+
+
+async def cmd_mystats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    await db.upsert_user(user)
+    doc = await db.user_global_stats(user.id)
+    if not doc:
+        await update.message.reply_text("You haven't played yet! Join a group and type /newgame.")
+        return
+    await update.message.reply_text(my_stats(user.first_name, doc), parse_mode=ParseMode.HTML)
+
+
+async def cmd_me(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Send a beautiful global profile card image for the user."""
+    user = update.effective_user
+    await db.upsert_user(user)
+
+    global_doc = await db.user_global_stats(user.id)
+    if not global_doc:
+        await update.message.reply_text(
+            f"👤 <b>{user.first_name}</b>, you haven't played yet!\n"
+            "Join a group and type /newgame to start building your profile.",
+            parse_mode=ParseMode.HTML,
+        )
         return
 
+    # Global rank
+    all_rows    = await db.global_leaderboard(limit=500)
+    global_rank = next((i+1 for i,r in enumerate(all_rows) if r.get("user_id") == user.id), 0) or len(all_rows)+1
+
+    words_found   = global_doc.get("words_found", 0)
+    score         = global_doc.get("score", 0)
+    rounds_won    = global_doc.get("rounds_won", 0)
+    rounds_played = global_doc.get("rounds_played", 0)
+    streak_days   = global_doc.get("streak_days", 0)
+
+    # Fetch profile photo
+    avatar_bytes = None
+    try:
+        photos = await ctx.bot.get_user_profile_photos(user.id, limit=1)
+        if photos.photos:
+            file = await ctx.bot.get_file(photos.photos[0][-1].file_id)
+            buf  = io.BytesIO()
+            await file.download_to_memory(buf)
+            avatar_bytes = buf.getvalue()
+    except Exception:
+        pass
+
+    loop = asyncio.get_event_loop()
+    img  = await loop.run_in_executor(None, render_me_card,
+        user.first_name, user.id,
+        words_found, score, global_rank,
+        rounds_won, rounds_played, streak_days,
+        0, 0, "", 0, 0,
+        avatar_bytes,
+        False,        # show_group = False always
+        -1,           # palette_idx = -1 → random
+    )
+
+    await update.message.reply_photo(
+        photo=io.BytesIO(img),
+        caption=f"👤 <b>{user.first_name}'s</b> WordGrid Card",
+        parse_mode=ParseMode.HTML,
+        reply_markup=me_kb(),
+    )
+
+
+async def cmd_endgame(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not await _is_admin(update, ctx):
+        await update.message.reply_text("❌ Admins only.")
+        return
+    chat    = update.effective_chat
+    session = sessions.get(chat.id)
+    if not session or not session.active:
+        await update.message.reply_text("No active game.")
+        return
+    if session._task:
+        session._task.cancel()
+    await _end_round(chat.id, session, ctx)
+
+
+async def cmd_resetboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not await _is_admin(update, ctx):
+        await update.message.reply_text("❌ Admins only.")
+        return
     await db.reset_group_board(update.effective_chat.id)
-    await update.message.reply_text("✅ Group leaderboard has been reset.")
+    await update.message.reply_text(f"{ICO_TROPHY()} Group leaderboard reset.", parse_mode=ParseMode.HTML)
 
 
-async def cmd_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def cmd_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
         return
+    data = await db.bot_stats()
+    await update.message.reply_text(bot_stats(data["users"], data["groups"]), parse_mode=ParseMode.HTML)
 
-    args = context.args
+
+async def cmd_broadcast(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != OWNER_ID:
+        return
+    args = ctx.args or []
     if not args or args[0] not in ("all", "users", "groups"):
         await update.message.reply_text(BROADCAST_USAGE, parse_mode=ParseMode.HTML)
         return
-
-    target  = args[0]
-    message = " ".join(args[1:]).strip()
-    if not message:
-        await update.message.reply_text(BROADCAST_USAGE, parse_mode=ParseMode.HTML)
+    target = args[0]
+    text   = " ".join(args[1:]).strip()
+    if not text:
+        await update.message.reply_text("❌ Message is empty.")
         return
-
-    ids: list = []
+    ids = []
     if target in ("all", "users"):
         ids += await db.all_user_ids()
     if target in ("all", "groups"):
         ids += await db.all_group_ids()
-
+    ids   = list(set(ids))
+    total = len(ids)
+    prog  = await update.message.reply_text(f"📢 Broadcasting to <b>{total}</b> targets…", parse_mode=ParseMode.HTML)
     sent = failed = 0
     for cid in ids:
         try:
-            await context.bot.send_message(cid, message, parse_mode=ParseMode.HTML)
+            await ctx.bot.send_message(cid, text, parse_mode=ParseMode.HTML)
             sent += 1
-        except Exception:
+        except Forbidden:
+            await db.mark_blocked(cid, True)
+            failed += 1
+        except TelegramError:
             failed += 1
         await asyncio.sleep(BROADCAST_DELAY)
-
-    await update.message.reply_text(
-        broadcast_done(sent, failed, len(ids)),
-        parse_mode=ParseMode.HTML,
-    )
+    await prog.edit_text(broadcast_done(sent, failed, total), parse_mode=ParseMode.HTML)
 
 
-async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != OWNER_ID:
-        return
-    stats = await db.bot_stats()
-    await update.message.reply_text(
-        fmt_bot_stats(stats["users"], stats["groups"]),
-        parse_mode=ParseMode.HTML,
-    )
+# ── Idle nudge job ────────────────────────────────────────────────
 
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  MESSAGE HANDLER  (word guesses)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    s = sessions.get(chat_id)
-    if not s or not s.active:
-        return
-
-    text = update.message.text.strip().upper()
-    user = update.effective_user
-
-    if not text.isalpha():
-        return
-
-    if s.already_found(text):
-        return  # silently ignore already found words
-
-    if not s.valid_guess(text):
-        # Wrong guess — reset combo
-        s.reset_combo(user.id)
-        return
-
-    # Correct guess!
-    pts   = s.register(text, user.id, user.first_name, user.username)
-    combo = s.p_combos[user.id]
-    left  = len(s.words) - len(s.found_words)
-
-    chat  = update.effective_chat
-    msg = await update.message.reply_text(
-        word_found(user.first_name, text, pts, combo, left),
-        parse_mode=ParseMode.HTML,
-        reply_markup=word_found_kb(
-            s.grid_msg_id,
-            chat_username=getattr(chat, "username", None),
-            chat_id_int=chat.id,
-        ),
-    )
-    s.msg_ids.append(msg.message_id)
-    s.msg_ids.append(update.message.message_id)
-
-    # Update grid image to show found word highlighted
-    try:
-        new_img = await _run_in_executor(
-            render_image,
-            s.theme, s.grid, s.placed, s.found_words,
-            s.round_num, s.grid_size,
-        )
-        new_caption = game_start_caption(
-            THEMES[s.theme]["name"], THEMES[s.theme]["emoji"],
-            s.round_num, len(s.words), s.duration, s.grid_size,
-            words=s.words, found_words=s.found_words,
-        )
-        kb = hard_action_kb() if s.is_hard else game_action_kb()
-        await context.bot.edit_message_media(
-            chat_id=chat_id,
-            message_id=s.grid_msg_id,
-            media=InputMediaPhoto(
-                media=io.BytesIO(new_img),
-                caption=new_caption,
-                parse_mode=ParseMode.HTML,
-            ),
-            reply_markup=kb,
-        )
-    except Exception as e:
-        log.debug(f"Grid update skipped: {e}")
-
-    if s.complete():
-        if s._task:
-            s._task.cancel()
-        await _end_round(context, chat_id, s, reason="complete")
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  CALLBACK QUERY HANDLER
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q    = update.callback_query
-    data = q.data
-    uid  = q.from_user.id
-    chat = q.message.chat
-
-    await q.answer()
-
-    # ── start / help / globalboard shortcuts ──
-    if data == "cb:start":
-        await q.message.edit_text(
-            start_private(q.from_user.first_name),
-            parse_mode=ParseMode.HTML,
-            reply_markup=start_kb(),
-        )
-        return
-
-    if data == "cb:help":
-        await q.message.reply_text(help_text(), parse_mode=ParseMode.HTML)
-        return
-
-    if data == "cb:globalboard":
-        rows = await db.global_leaderboard()
-        if rows:
-            img_bytes = await _run_in_executor(render_leaderboard, rows, "Global Leaderboard")
-            await q.message.reply_photo(
-                photo=io.BytesIO(img_bytes),
-                caption=leaderboard_text(rows, "🌍 Global Top Players"),
-                parse_mode=ParseMode.HTML,
-                reply_markup=globalboard_kb(),
-            )
-        else:
-            await q.message.reply_text(
-                leaderboard_text([], "Global Leaderboard"),
-                parse_mode=ParseMode.HTML,
-                reply_markup=globalboard_kb(),
-            )
-        return
-
-    if data == "cb:leaderboard":
-        chat_id = chat.id
-        rows = await db.group_leaderboard(chat_id)
-        if rows:
-            img_bytes = await _run_in_executor(
-                render_leaderboard, rows, f"{chat.title} Leaderboard"
-            )
-            await q.message.reply_photo(
-                photo=io.BytesIO(img_bytes),
-                caption=leaderboard_text(rows, f"{chat.title} — Top Players"),
-                parse_mode=ParseMode.HTML,
-                reply_markup=leaderboard_kb(),
-            )
-        else:
-            await q.message.reply_text(
-                leaderboard_text([], "Leaderboard"),
-                parse_mode=ParseMode.HTML,
-                reply_markup=leaderboard_kb(),
-            )
-        return
-
-    if data == "cb:endgame":
-        chat_id = chat.id
-        try:
-            member = await chat.get_member(uid)
-            is_admin = member.status in ("administrator", "creator")
-        except Exception:
-            is_admin = False
-
-        if not is_admin and uid != OWNER_ID:
-            await q.answer("🚫 Only admins can end the game.", show_alert=True)
-            return
-
-        s = sessions.get(chat_id)
-        if not s or not s.active:
-            await q.answer("No active game.", show_alert=True)
-            return
-
-        await _end_round(context, chat_id, s, reason="endgame")
-        return
-
-    # ── Round mode selection (startmode:normal:auto / startmode:hard:manual …) ──
-    if data.startswith("startmode:"):
-        _, game_type, mode = data.split(":")
-        chat_id  = chat.id
-        is_hard  = (game_type == "hard")
-
-        if sessions.active(chat_id):
-            await q.answer("A game is already running!", show_alert=True)
-            return
-
-        pending_key = f"pending_theme:{chat_id}"
-        theme_key   = context.bot_data.pop(pending_key, None)
-
-        if is_hard:
-            theme_key = pick_hard_theme(chat_id, THEME_LIST)
-        elif not theme_key:
-            theme_key = pick_random_theme(chat_id, THEME_LIST)
-
-        await q.message.delete()
-        await _launch_round(
-            context, chat_id,
-            theme_key=theme_key,
-            round_num=1,
-            is_hard=is_hard,
-            round_mode=mode,
-        )
-        return
-
-    # ── Theme picker ──
-    if data.startswith("theme:"):
-        key     = data.split(":", 1)[1]
-        chat_id = chat.id
-
-        if sessions.active(chat_id):
-            await q.answer("A game is already running!", show_alert=True)
-            return
-
-        if key == "random":
-            key = pick_random_theme(chat_id, THEME_LIST)
-
-        if key not in THEMES:
-            await q.answer("Unknown theme.", show_alert=True)
-            return
-
-        # Store theme, ask for round mode
-        context.bot_data[f"pending_theme:{chat_id}"] = key
-        await q.message.edit_text(
-            f"✅ Theme: <b>{THEMES[key]['emoji']} {THEMES[key]['name']}</b>\n\n"
-            "Choose round progression mode:",
-            parse_mode=ParseMode.HTML,
-            reply_markup=round_mode_kb("normal"),
-        )
-        return
-
-    # ── Next round button (manual mode) ──
-    if data.startswith("nextround:"):
-        parts       = data.split(":")          # nextround:theme:round:mode
-        theme_key   = parts[1]
-        next_round  = int(parts[2])
-        mode        = parts[3] if len(parts) > 3 else "auto"
-        chat_id     = chat.id
-        is_hard     = (mode == "hard")
-
-        if sessions.active(chat_id):
-            await q.answer("A game is already running!", show_alert=True)
-            return
-
-        await q.message.delete()
-        await _launch_round(
-            context, chat_id,
-            theme_key=theme_key,
-            round_num=next_round,
-            is_hard=is_hard,
-            round_mode=mode,
-        )
-        return
-
-    # ── Leaderboard tabs (lb:chat:today / lb:global:alltime …) ──
-    if data.startswith("lb:"):
-        _, scope, time_filter = data.split(":")
-        chat_id = chat.id
-
-        if scope == "global":
-            rows = await db.global_leaderboard()
-            title = "🌍 Global Top Players"
-            kb    = globalboard_kb(time_filter=time_filter)
-        else:
-            rows  = await db.group_leaderboard(chat_id)
-            title = f"{chat.title} — Top Players"
-            kb    = leaderboard_kb(time_filter=time_filter)
-
-        if rows:
-            img_bytes = await _run_in_executor(render_leaderboard, rows, title)
-            try:
-                await q.message.delete()
-            except Exception:
-                pass
-            await q.message.reply_photo(
-                photo=io.BytesIO(img_bytes),
-                caption=leaderboard_text(rows, title),
-                parse_mode=ParseMode.HTML,
-                reply_markup=kb,
-            )
-        else:
-            await q.message.edit_text(
-                leaderboard_text([], title),
-                parse_mode=ParseMode.HTML,
-                reply_markup=kb,
-            )
-        return
-
-    # ── Go-to-grid fallback callback ──
-    if data.startswith("cb:gotogrid:"):
-        await q.answer("Scroll up to find the grid! 🔠", show_alert=True)
-        return
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  CHAT MEMBER HANDLER  (bot added / removed)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-async def on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    result = update.my_chat_member
-    chat   = result.chat
-    new    = result.new_chat_member
-
-    if new.status in ("member", "administrator"):
-        # Bot was added to a group
-        await db.upsert_group(chat)
-        try:
-            await context.bot.send_message(
-                chat_id=chat.id,
-                text=new_group_welcome(chat.title),
-                parse_mode=ParseMode.HTML,
-            )
-        except Exception:
-            pass
-    elif new.status in ("left", "kicked"):
-        await db.mark_group_inactive(chat.id)
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  IDLE NUDGE JOB
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-async def idle_nudge_job(context: ContextTypes.DEFAULT_TYPE):
-    """Periodic job: nudge groups that haven't played in a while."""
+async def idle_nudge_job(ctx: ContextTypes.DEFAULT_TYPE):
+    """Runs on schedule. Nudges groups idle for IDLE_NUDGE_AFTER seconds."""
     group_ids = await db.all_group_ids()
     for chat_id in group_ids:
         if sessions.active(chat_id):
             continue
         if idle_seconds(chat_id) < IDLE_NUDGE_AFTER:
             continue
-        # Mark as nudged so we don't spam
-        touch_activity(chat_id)
-        nudge = random.choice(IDLE_NUDGES)
         try:
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=nudge,
-                parse_mode=ParseMode.HTML,
+            await ctx.bot.send_message(
+                chat_id, random.choice(IDLE_NUDGES), parse_mode=ParseMode.HTML,
             )
-        except Exception as e:
-            log.debug(f"Nudge failed for {chat_id}: {e}")
-        await asyncio.sleep(0.1)
+            touch_activity(chat_id)
+        except Forbidden:
+            await db.mark_group_inactive(chat_id)
+        except TelegramError:
+            pass
+        await asyncio.sleep(0.05)
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  ERROR HANDLER
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ── Callbacks ─────────────────────────────────────────────────────
 
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-    log.error("Exception while handling update:", exc_info=context.error)
+async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    q    = update.callback_query
+    data = q.data
+    chat = update.effective_chat
+    user = update.effective_user
+    await q.answer()
+
+    if data == "cb:start":
+        await _safe_edit_text(q, start_private(user.first_name), reply_markup=start_kb())
+
+    elif data.startswith("startmode:"):
+        # startmode:{game_type}:{mode}  e.g. startmode:normal:auto
+        parts = data.split(":")
+        if len(parts) != 3:
+            await q.answer("Invalid selection.", show_alert=True)
+            return
+        game_type  = parts[1]   # "normal" or "hard"
+        round_mode = parts[2]   # "auto" or "manual"
+        if chat.type == ChatType.PRIVATE:
+            await q.answer("Add me to a group to play!", show_alert=True)
+            return
+        if sessions.active(chat.id):
+            await q.answer("A game is already running!", show_alert=True)
+            return
+        await db.upsert_group(chat)
+        mode_label = "🚀 Automatic" if round_mode == "auto" else "🕹️ Manual"
+        await q.answer(f"{mode_label} mode selected!")
+        try:
+            await q.delete_message()
+        except TelegramError:
+            pass
+        if game_type == "hard":
+            await _launch_hard(chat.id, ctx=ctx, round_mode=round_mode)
+        else:
+            theme_key = ctx.chat_data.get("pending_theme") or pick_random_theme(chat.id, THEME_LIST)
+            ctx.chat_data.pop("pending_theme", None)
+            await _launch(chat.id, theme_key, round_num=1, ctx=ctx, round_mode=round_mode)
+
+    elif data == "cb:help":
+        await _safe_edit_text(q, help_text(), reply_markup=back_kb())
+
+    elif data == "cb:leaderboard":
+        if chat.type == ChatType.PRIVATE:
+            rows  = await db.global_leaderboard(limit=15)
+            title = "🌍 Global Leaderboard"
+            kb    = globalboard_kb()
+        else:
+            rows  = await db.group_leaderboard(chat.id, limit=15)
+            title = f"🏆 {chat.title or 'Group Leaderboard'}"
+            kb    = leaderboard_kb()
+        await _safe_edit_text(q, leaderboard_text(rows, title), reply_markup=kb)
+
+    elif data == "cb:globalboard":
+        rows = await db.global_leaderboard(limit=15)
+        kb   = globalboard_kb()
+        await _safe_edit_text(
+            q, leaderboard_text(rows, "🌍 Global Leaderboard"),
+            reply_markup=kb,
+        )
+
+    elif data.startswith("lb:"):
+        # Format: lb:{scope}:{time_filter}  e.g. lb:chat:alltime, lb:global:week
+        parts = data.split(":")
+        scope  = parts[1] if len(parts) > 1 else "chat"   # "chat" or "global"
+        tfilter = parts[2] if len(parts) > 2 else "alltime"  # "today","week","alltime"
+
+        if scope == "global":
+            rows  = await db.global_leaderboard(limit=15, time_filter=tfilter)
+            title = "🌍 Global Leaderboard"
+            kb    = globalboard_kb(time_filter=tfilter)
+        else:
+            rows  = await db.group_leaderboard(chat.id, limit=15, time_filter=tfilter)
+            title = f"🏆 {chat.title or 'Group'} Leaderboard"
+            kb    = leaderboard_kb(time_filter=tfilter)
+
+        await _safe_edit_text(q, leaderboard_text(rows, title), reply_markup=kb)
+
+    elif data == "cb:timeleft":
+        session = sessions.get(chat.id)
+        if session and session.active:
+            await q.answer(f"⏱ {session.time_left()} seconds remaining!", show_alert=True)
+        else:
+            await q.answer("No active game.", show_alert=True)
+
+    elif data == "cb:hint":
+        session = sessions.get(chat.id)
+        if not session or not session.active:
+            await q.answer("No active game!", show_alert=True)
+            return
+        unfound = [w for w in session.words if w not in session.found_words]
+        if not unfound:
+            await q.answer("All words found already!", show_alert=True)
+            return
+
+        hint_body = _build_hint_text(session)
+
+        if session.hint_msg_id:
+            try:
+                await ctx.bot.edit_message_text(
+                    chat_id=chat.id, message_id=session.hint_msg_id,
+                    text=hint_body, parse_mode=ParseMode.HTML,
+                )
+                return
+            except TelegramError:
+                pass
+
+        try:
+            hint_msg = await ctx.bot.send_message(chat.id, hint_body, parse_mode=ParseMode.HTML)
+            session.hint_msg_id = hint_msg.message_id
+            session.msg_ids.append(hint_msg.message_id)
+        except TelegramError:
+            pass
+
+    elif data.startswith("cb:gotogrid:"):
+        # Legacy fallback — new Go-to-Grid buttons are URL buttons and never
+        # fire a callback. This only runs for old messages sent before the fix.
+        try:
+            grid_msg_id = int(data.split(":")[2])
+            chat_obj    = await ctx.bot.get_chat(chat.id)
+            username    = getattr(chat_obj, "username", None)
+            if username:
+                link = f"https://t.me/{username}/{grid_msg_id}"
+            else:
+                raw     = str(chat.id)
+                numeric = raw[4:] if raw.startswith("-100") else raw.lstrip("-")
+                link    = f"https://t.me/c/{numeric}/{grid_msg_id}"
+            await q.answer(f"Tap to jump → {link}", show_alert=True)
+        except Exception:
+            await q.answer("Scroll up to find the grid!", show_alert=True)
+
+    elif data == "cb:endgame":
+        if user.id != OWNER_ID:
+            try:
+                from telegram import ChatMemberAdministrator, ChatMemberOwner
+                m = await ctx.bot.get_chat_member(chat.id, user.id)
+                if not isinstance(m, (ChatMemberAdministrator, ChatMemberOwner)):
+                    await q.answer("Admins only!", show_alert=True)
+                    return
+            except Exception:
+                await q.answer("Admins only!", show_alert=True)
+                return
+        session = sessions.get(chat.id)
+        if not session or not session.active:
+            await q.answer("No active game.", show_alert=True)
+            return
+        if session._task:
+            session._task.cancel()
+        await _end_round(chat.id, session, ctx)
+
+    elif data.startswith("nextround:"):
+        parts = data.split(":")
+        if len(parts) < 3:
+            return
+        theme_key  = parts[1]
+        try:
+            next_round = int(parts[2])
+        except ValueError:
+            return
+        # parts[3] optionally carries "hard" or "normal"
+        is_hard_next = (len(parts) >= 4 and parts[3] == "hard")
+        if chat.type == ChatType.PRIVATE:
+            await q.answer("Add me to a group to play!", show_alert=True)
+            return
+        if sessions.active(chat.id):
+            await q.answer("A game is already running!", show_alert=True)
+            return
+        if theme_key not in THEMES:
+            theme_key = pick_random_theme(chat.id, THEME_LIST)
+        await db.upsert_group(chat)
+        await q.answer(f"▶️ Starting Round {next_round}!")
+        try:
+            await q.delete_message()
+        except TelegramError:
+            pass
+        if is_hard_next:
+            await _launch_hard(chat.id, ctx=ctx, round_mode="manual")
+        else:
+            await _launch(chat.id, theme_key, round_num=next_round, ctx=ctx, round_mode="manual")
+
+    elif data.startswith("theme:"):
+        key = data.split(":")[1]
+        if key == "random":
+            key = pick_random_theme(chat.id, THEME_LIST)
+        if chat.type == ChatType.PRIVATE:
+            await q.answer("Add me to a group to play!", show_alert=True)
+            return
+        if sessions.active(chat.id):
+            await q.answer("A game is running! Finish it first.", show_alert=True)
+            return
+        await db.upsert_group(chat)
+        # Store chosen theme and ask for round progression mode
+        ctx.chat_data["pending_theme"] = key
+        await _safe_edit_text(
+            q,
+            f"🎮 <b>{THEMES[key]['emoji']} {THEMES[key]['name']}</b> selected!\n\n"
+            f"🚀 <b>Automatic</b> — next round starts automatically after 10s\n"
+            f"🕹️ <b>Manual</b> — you press the button to start each round",
+            reply_markup=round_mode_kb("normal"),
+        )
+
+
+# ── Global error handler ──────────────────────────────────────────
+async def error_handler(update: object, ctx: ContextTypes.DEFAULT_TYPE):
+    """Catches ALL unhandled exceptions — logs them, notifies user only for real errors."""
+    err = ctx.error
+
+    # Silently ignore common non-critical Telegram API errors
+    if isinstance(err, (Forbidden, BadRequest)):
+        log.warning(f"Ignored TelegramError: {err}")
+        return
+    if isinstance(err, TelegramError):
+        log.warning(f"TelegramError (non-critical): {err}")
+        return
+
+    log.error("Unhandled exception:", exc_info=err)
+    if isinstance(update, Update) and update.effective_message:
+        try:
+            await update.effective_message.reply_text(
+                "⚠️ Something went wrong. Please try again in a moment."
+            )
+        except TelegramError:
+            pass
