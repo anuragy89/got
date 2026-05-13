@@ -148,23 +148,14 @@ def no_hint_text() -> str:
 
 MEDALS = ["🥇", "🥈", "🥉"]
 
-def round_end(summary, missed, theme_name, round_num, max_rounds, round_complete=False) -> tuple:
-    """
-    Returns a tuple of 3 separate message strings to be sent as 3 quotes:
-      msg1 — Game Over header
-      msg2 — Round Summary + player list (+ missed words if any)
-      msg3 — All words found / time's up + thanks line
-    """
+def round_end(summary, missed, theme_name, round_num, max_rounds, round_complete=False) -> str:
     is_final = (round_num >= max_rounds)
 
-    # ── Quote 1: Game Over ──────────────────────────────────────
-    if is_final:
-        msg1 = f"🏁 <b>GAME OVER!</b> 🎉"
-    else:
-        msg1 = f"🎉 <b>Game Over!</b> 🎉"
+    # ── Blockquote 1: Game Over ──────────────────────────────────
+    q1 = "🏁 <b>GAME OVER!</b> 🎉" if is_final else "🎉 <b>Game Over!</b> 🎉"
 
-    # ── Quote 2: Round Summary + players ────────────────────────
-    summary_lines = [f"--- Round Summary ---"]
+    # ── Blockquote 2: Round Summary + players ───────────────────
+    summary_lines = ["--- Round Summary ---"]
     if not summary:
         summary_lines.append("<i>No one scored this round!</i>")
     else:
@@ -176,26 +167,30 @@ def round_end(summary, missed, theme_name, round_num, max_rounds, round_complete
     if missed:
         summary_lines.append("")
         summary_lines.append(f"{ICO_PUZZLE()} <b>Missed:</b> {', '.join(missed)}")
-    msg2 = "\n".join(summary_lines)
+    q2 = "\n".join(summary_lines)
 
-    # ── Quote 3: Next round / end message ───────────────────────
+    # ── Blockquote 3: Next round / end message ───────────────────
     if is_final:
-        msg3 = (
+        q3 = (
             f"🏁 <b>All 12 rounds complete! Great game!</b>\n"
             f"Thanks for playing, start another game by /newhard or /newgame."
         )
     elif round_complete:
-        msg3 = (
+        q3 = (
             f"{ICO_ROCKET()} All words found! Round {round_num + 1} starts automatically in 10s...\n"
             f"Thanks for playing start another game by /newhard or /newgame."
         )
     else:
-        msg3 = (
+        q3 = (
             f"⏰ <b>Time's up!</b> Not all words were found.\n"
             f"Thanks for playing start another game by /newhard or /newgame."
         )
 
-    return (msg1, msg2, msg3)
+    return (
+        f"<blockquote>{q1}</blockquote>\n"
+        f"<blockquote>{q2}</blockquote>\n"
+        f"<blockquote>{q3}</blockquote>"
+    )
 
 def leaderboard_text(rows, title) -> str:
     if not rows:
