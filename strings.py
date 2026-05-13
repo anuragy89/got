@@ -149,56 +149,30 @@ def no_hint_text() -> str:
 MEDALS = ["🥇", "🥈", "🥉"]
 
 def round_end(summary, missed, theme_name, round_num, max_rounds, round_complete=False) -> str:
-    """
-    Three SEPARATE <blockquote> blocks — exactly as seen in screenshot:
-      [block 1]  🎉 Game Over! 🎉
-      [block 2]  --- Round Summary ---  + scores + missed
-      [block 3]  🚀 footer / thanks line
-    Premium emoji used for 🎉 and 🚀 when USE_PREMIUM_EMOJI=true.
-    """
     is_final = (round_num >= max_rounds)
-
-    # ── Emojis (premium-aware) ─────────────────────────────────────
-    PARTY   = _pe("5188324214810550011", "🎉")   # party-popper
-    ROCKET  = ICO_ROCKET()                        # 🚀 already premium-aware
-    FLAG    = _pe("5368324170671202286", "🏁")   # chequered flag
-
-    # ── Block 1: header ───────────────────────────────────────────
-    block1 = f"<blockquote>{PARTY} <b>Game Over!</b> {PARTY}</blockquote>"
-
-    # ── Block 2: scoreboard ───────────────────────────────────────
-    score_lines = ["--- Round Summary ---"]
+    header = f"{ICO_CROWN()} <b>{'🏁 FINAL ' if is_final else ''}Round {round_num} Over! — {theme_name}</b>"
+    lines = [header, "━" * 26]
     if not summary:
-        score_lines.append("<i>No one scored this round!</i>")
+        lines.append("<i>No one scored this round!</i>")
     else:
         for i, row in enumerate(summary[:5]):
-            score_lines.append(
-                f"{i+1}. <b>{row['name']}</b>: {row['score']} points  "
-                f"<i>({row['words']} words)</i>"
-            )
+            med = MEDALS[i] if i < 3 else f"  {i+1}."
+            lines.append(f"{med} <b>{row['name']}</b> — {row['score']} pts  <i>({row['words']} words)</i>")
+        lines.append("")
+        lines.append(f"{ICO_TROPHY()} <b>Round winner: {summary[0]['name']}</b>  🎉")
     if missed:
-        score_lines.append("")
-        score_lines.append(f"Missed: {', '.join(missed)}")
-    block2 = "<blockquote>" + "\n".join(score_lines) + "</blockquote>"
-
-    # ── Block 3: footer ───────────────────────────────────────────
+        lines.append("")
+        lines.append(f"{ICO_PUZZLE()} <b>Missed:</b> {', '.join(missed)}")
+    lines.append("")
     if is_final:
-        footer_lines = [
-            f"{FLAG} <b>All 12 rounds complete! Thanks for playing!</b>",
-            "Start a new game with /newgame or /newhard.",
-        ]
+        lines.append("🏁 <b>All 12 rounds complete! Great game!</b>")
+        lines.append("Type /newgame to start fresh.")
     elif round_complete:
-        footer_lines = [
-            f"{ROCKET} <b>All words found! Round {round_num + 1} starts automatically in 10s…</b>",
-            "Thanks for playing start another game by /newhard or /newgame.",
-        ]
+        lines.append(f"{ICO_ROCKET()} <b>All words found!</b> Round {round_num + 1} starts automatically in 10s…")
     else:
-        footer_lines = [
-            "Thanks for playing start another game by /newhard or /newgame.",
-        ]
-    block3 = "<blockquote>" + "\n".join(footer_lines) + "</blockquote>"
-
-    return f"{block1}\n{block2}\n{block3}"
+        lines.append(f"⏰ <b>Time's up!</b> Not all words were found.")
+        lines.append(f"Type /newgame to start a new game!")
+    return "\n".join(lines)
 
 def leaderboard_text(rows, title) -> str:
     if not rows:
