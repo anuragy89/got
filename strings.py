@@ -149,30 +149,54 @@ def no_hint_text() -> str:
 MEDALS = ["🥇", "🥈", "🥉"]
 
 def round_end(summary, missed, theme_name, round_num, max_rounds, round_complete=False) -> str:
+    """
+    Round-over message styled exactly like the reference screenshot:
+      🎉 Game Over! 🎉
+      --- Round Summary ---
+      1. Name: X points  (Y words)
+      ...
+      Thanks for playing … /newgame or /newhard
+    Wrapped in a Telegram <blockquote> so it renders as a quoted block.
+    Works identically for normal and hard mode.
+    """
     is_final = (round_num >= max_rounds)
-    header = f"{ICO_CROWN()} <b>{'🏁 FINAL ' if is_final else ''}Round {round_num} Over! — {theme_name}</b>"
-    lines = [header, "━" * 26]
+    inner = []
+
+    # ── Header ────────────────────────────────────────────────────
+    inner.append("🎉 <b>Game Over!</b> 🎉")
+    inner.append("")
+    inner.append("--- Round Summary ---")
+
+    # ── Scores ────────────────────────────────────────────────────
     if not summary:
-        lines.append("<i>No one scored this round!</i>")
+        inner.append("<i>No one scored this round!</i>")
     else:
         for i, row in enumerate(summary[:5]):
-            med = MEDALS[i] if i < 3 else f"  {i+1}."
-            lines.append(f"{med} <b>{row['name']}</b> — {row['score']} pts  <i>({row['words']} words)</i>")
-        lines.append("")
-        lines.append(f"{ICO_TROPHY()} <b>Round winner: {summary[0]['name']}</b>  🎉")
+            inner.append(
+                f"{i+1}. <b>{row['name']}</b>: {row['score']} points  "
+                f"<i>({row['words']} words)</i>"
+            )
+
+    # ── Missed words ─────────────────────────────────────────────
     if missed:
-        lines.append("")
-        lines.append(f"{ICO_PUZZLE()} <b>Missed:</b> {', '.join(missed)}")
-    lines.append("")
+        inner.append("")
+        inner.append(f"Missed: {', '.join(missed)}")
+
+    # ── Footer ────────────────────────────────────────────────────
+    inner.append("")
     if is_final:
-        lines.append("🏁 <b>All 12 rounds complete! Great game!</b>")
-        lines.append("Type /newgame to start fresh.")
+        inner.append("🏁 All 12 rounds complete! Thanks for playing!")
+        inner.append("Start a new game with /newgame or /newhard.")
     elif round_complete:
-        lines.append(f"{ICO_ROCKET()} <b>All words found!</b> Round {round_num + 1} starts automatically in 10s…")
+        inner.append(
+            f"🚀 All words found! Round {round_num + 1} starts automatically in 10s…"
+        )
+        inner.append("Thanks for playing start another game by /newhard or /newgame.")
     else:
-        lines.append(f"⏰ <b>Time's up!</b> Not all words were found.")
-        lines.append(f"Type /newgame to start a new game!")
-    return "\n".join(lines)
+        inner.append("Thanks for playing start another game by /newhard or /newgame.")
+
+    body = "\n".join(inner)
+    return f"<blockquote>{body}</blockquote>"
 
 def leaderboard_text(rows, title) -> str:
     if not rows:
