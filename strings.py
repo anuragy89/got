@@ -150,53 +150,55 @@ MEDALS = ["🥇", "🥈", "🥉"]
 
 def round_end(summary, missed, theme_name, round_num, max_rounds, round_complete=False) -> str:
     """
-    Round-over message styled exactly like the reference screenshot:
-      🎉 Game Over! 🎉
-      --- Round Summary ---
-      1. Name: X points  (Y words)
-      ...
-      Thanks for playing … /newgame or /newhard
-    Wrapped in a Telegram <blockquote> so it renders as a quoted block.
-    Works identically for normal and hard mode.
+    Three SEPARATE <blockquote> blocks — exactly as seen in screenshot:
+      [block 1]  🎉 Game Over! 🎉
+      [block 2]  --- Round Summary ---  + scores + missed
+      [block 3]  🚀 footer / thanks line
+    Premium emoji used for 🎉 and 🚀 when USE_PREMIUM_EMOJI=true.
     """
     is_final = (round_num >= max_rounds)
-    inner = []
 
-    # ── Header ────────────────────────────────────────────────────
-    inner.append("🎉 <b>Game Over!</b> 🎉")
-    inner.append("")
-    inner.append("--- Round Summary ---")
+    # ── Emojis (premium-aware) ─────────────────────────────────────
+    PARTY   = _pe("5188324214810550011", "🎉")   # party-popper
+    ROCKET  = ICO_ROCKET()                        # 🚀 already premium-aware
+    FLAG    = _pe("5368324170671202286", "🏁")   # chequered flag
 
-    # ── Scores ────────────────────────────────────────────────────
+    # ── Block 1: header ───────────────────────────────────────────
+    block1 = f"<blockquote>{PARTY} <b>Game Over!</b> {PARTY}</blockquote>"
+
+    # ── Block 2: scoreboard ───────────────────────────────────────
+    score_lines = ["--- Round Summary ---"]
     if not summary:
-        inner.append("<i>No one scored this round!</i>")
+        score_lines.append("<i>No one scored this round!</i>")
     else:
         for i, row in enumerate(summary[:5]):
-            inner.append(
+            score_lines.append(
                 f"{i+1}. <b>{row['name']}</b>: {row['score']} points  "
                 f"<i>({row['words']} words)</i>"
             )
-
-    # ── Missed words ─────────────────────────────────────────────
     if missed:
-        inner.append("")
-        inner.append(f"Missed: {', '.join(missed)}")
+        score_lines.append("")
+        score_lines.append(f"Missed: {', '.join(missed)}")
+    block2 = "<blockquote>" + "\n".join(score_lines) + "</blockquote>"
 
-    # ── Footer ────────────────────────────────────────────────────
-    inner.append("")
+    # ── Block 3: footer ───────────────────────────────────────────
     if is_final:
-        inner.append("🏁 All 12 rounds complete! Thanks for playing!")
-        inner.append("Start a new game with /newgame or /newhard.")
+        footer_lines = [
+            f"{FLAG} <b>All 12 rounds complete! Thanks for playing!</b>",
+            "Start a new game with /newgame or /newhard.",
+        ]
     elif round_complete:
-        inner.append(
-            f"🚀 All words found! Round {round_num + 1} starts automatically in 10s…"
-        )
-        inner.append("Thanks for playing start another game by /newhard or /newgame.")
+        footer_lines = [
+            f"{ROCKET} <b>All words found! Round {round_num + 1} starts automatically in 10s…</b>",
+            "Thanks for playing start another game by /newhard or /newgame.",
+        ]
     else:
-        inner.append("Thanks for playing start another game by /newhard or /newgame.")
+        footer_lines = [
+            "Thanks for playing start another game by /newhard or /newgame.",
+        ]
+    block3 = "<blockquote>" + "\n".join(footer_lines) + "</blockquote>"
 
-    body = "\n".join(inner)
-    return f"<blockquote>{body}</blockquote>"
+    return f"{block1}\n{block2}\n{block3}"
 
 def leaderboard_text(rows, title) -> str:
     if not rows:
