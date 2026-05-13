@@ -148,31 +148,54 @@ def no_hint_text() -> str:
 
 MEDALS = ["🥇", "🥈", "🥉"]
 
-def round_end(summary, missed, theme_name, round_num, max_rounds, round_complete=False) -> str:
+def round_end(summary, missed, theme_name, round_num, max_rounds, round_complete=False) -> tuple:
+    """
+    Returns a tuple of 3 separate message strings to be sent as 3 quotes:
+      msg1 — Game Over header
+      msg2 — Round Summary + player list (+ missed words if any)
+      msg3 — All words found / time's up + thanks line
+    """
     is_final = (round_num >= max_rounds)
-    header = f"{ICO_CROWN()} <b>{'🏁 FINAL ' if is_final else ''}Round {round_num} Over! — {theme_name}</b>"
-    lines = [header, "━" * 26]
+
+    # ── Quote 1: Game Over ──────────────────────────────────────
+    if is_final:
+        msg1 = f"🏁 <b>GAME OVER!</b> 🎉"
+    else:
+        msg1 = f"🎉 <b>Game Over!</b> 🎉"
+
+    # ── Quote 2: Round Summary + players ────────────────────────
+    summary_lines = [f"--- Round Summary ---"]
     if not summary:
-        lines.append("<i>No one scored this round!</i>")
+        summary_lines.append("<i>No one scored this round!</i>")
     else:
         for i, row in enumerate(summary[:5]):
-            med = MEDALS[i] if i < 3 else f"  {i+1}."
-            lines.append(f"{med} <b>{row['name']}</b> — {row['score']} pts  <i>({row['words']} words)</i>")
-        lines.append("")
-        lines.append(f"{ICO_TROPHY()} <b>Round winner: {summary[0]['name']}</b>  🎉")
+            med = MEDALS[i] if i < 3 else f"{i+1}."
+            summary_lines.append(
+                f"{med} <b>{row['name']}</b>: {row['score']} points  <i>({row['words']} words)</i>"
+            )
     if missed:
-        lines.append("")
-        lines.append(f"{ICO_PUZZLE()} <b>Missed:</b> {', '.join(missed)}")
-    lines.append("")
+        summary_lines.append("")
+        summary_lines.append(f"{ICO_PUZZLE()} <b>Missed:</b> {', '.join(missed)}")
+    msg2 = "\n".join(summary_lines)
+
+    # ── Quote 3: Next round / end message ───────────────────────
     if is_final:
-        lines.append("🏁 <b>All 12 rounds complete! Great game!</b>")
-        lines.append("Type /newgame to start fresh.")
+        msg3 = (
+            f"🏁 <b>All 12 rounds complete! Great game!</b>\n"
+            f"Thanks for playing, start another game by /newhard or /newgame."
+        )
     elif round_complete:
-        lines.append(f"{ICO_ROCKET()} <b>All words found!</b> Round {round_num + 1} starts automatically in 10s…")
+        msg3 = (
+            f"{ICO_ROCKET()} All words found! Round {round_num + 1} starts automatically in 10s...\n"
+            f"Thanks for playing start another game by /newhard or /newgame."
+        )
     else:
-        lines.append(f"⏰ <b>Time's up!</b> Not all words were found.")
-        lines.append(f"Type /newgame to start a new game!")
-    return "\n".join(lines)
+        msg3 = (
+            f"⏰ <b>Time's up!</b> Not all words were found.\n"
+            f"Thanks for playing start another game by /newhard or /newgame."
+        )
+
+    return (msg1, msg2, msg3)
 
 def leaderboard_text(rows, title) -> str:
     if not rows:
