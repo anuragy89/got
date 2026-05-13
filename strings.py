@@ -1,14 +1,9 @@
-import html as _html
 from config import (
     USE_PREMIUM_EMOJI,
     PEMOJI_TROPHY, PEMOJI_FIRE, PEMOJI_STAR, PEMOJI_CROWN,
     PEMOJI_DIAMOND, PEMOJI_LIGHTNING, PEMOJI_PUZZLE,
     PEMOJI_ROCKET, PEMOJI_JOYSTICK, PEMOJI_MEDAL,
 )
-
-def _esc(s: str) -> str:
-    """HTML-escape any user-supplied string before embedding in HTML messages."""
-    return _html.escape(str(s))
 
 def _pe(eid, fallback):
     if USE_PREMIUM_EMOJI:
@@ -30,7 +25,7 @@ def start_private(name: str) -> str:
     # Kept under 1024 chars (Telegram caption limit).
     # No box-drawing chars (┌│└─) inside <b> tags — Telegram HTML rejects them.
     return (
-        f"{ICO_ROCKET()} <b>Hey {_esc(name)}, welcome to WordGrid Bot!</b>\n\n"
+        f"{ICO_ROCKET()} <b>Hey {name}, welcome to WordGrid Bot!</b>\n\n"
         f"{ICO_PUZZLE()} I'm a <b>Word Grid Puzzle Game Bot</b> for Telegram groups.\n"
         f"Drop a themed grid — players find hidden words!\n\n"
         f"<b>How to play</b>\n"
@@ -107,7 +102,7 @@ def game_start_caption(theme_name, theme_emoji, round_num, n_words, duration, gr
     each found word shows a ✅ tick.
     """
     header = (
-        f"{ICO_PUZZLE()} <b>Round {round_num} — {theme_emoji} {_esc(theme_name)}!</b>\n"
+        f"{ICO_PUZZLE()} <b>Round {round_num} — {theme_emoji} {theme_name}!</b>\n"
         f"{ICO_LIGHTNING()} Timer: <b>{duration}s</b>  |  "
         f"{ICO_STAR()} Build combos for bonus points!\n\n"
     )
@@ -136,9 +131,8 @@ def game_start_caption(theme_name, theme_emoji, round_num, n_words, duration, gr
 
 def word_found(name, word, pts, combo, left) -> str:
     combo_txt = f"  {ICO_FIRE()} ×{combo} combo!" if combo >= 2 else ""
-    n = _esc(name)
     return (
-        f"{ICO_STAR()} <b>{n}</b> found <code>{word}</code>! "
+        f"{ICO_STAR()} <b>{name}</b> found <code>{word}</code>! "
         f"<b>+{pts} pts</b>{combo_txt}\n"
         f"<i>{left} word(s) still hidden</i>"
     )
@@ -179,7 +173,7 @@ def round_end(summary, missed, theme_name, round_num, max_rounds, round_complete
     else:
         for i, row in enumerate(summary[:5]):
             score_lines.append(
-                f"{i+1}. <b>{_esc(row['name'])}</b>: {row['score']} points  "
+                f"{i+1}. <b>{row['name']}</b>: {row['score']} points  "
                 f"<i>({row['words']} words)</i>"
             )
     if missed:
@@ -216,14 +210,13 @@ def leaderboard_text(rows, title) -> str:
         uid  = row.get("user_id")
         name = row.get("name", "Player")
         # Tappable mention — works for every user regardless of username
-        name = _esc(name)
         mention = f'<a href="tg://user?id={uid}">{name}</a>' if uid else f"<b>{name}</b>"
         lines.append(f"{med} {mention} — {row['score']} pts <i>({wf} words)</i>")
     return "\n".join(lines)
 
 def my_stats(first_name, doc) -> str:
     return (
-        f"{ICO_MEDAL()} <b>Stats — {_esc(first_name)}</b>\n\n"
+        f"{ICO_MEDAL()} <b>Stats — {first_name}</b>\n\n"
         f"{ICO_STAR()} Score:       <b>{doc.get('score',0):,}</b>\n"
         f"{ICO_PUZZLE()} Words found: <b>{doc.get('words_found',0):,}</b>\n"
     )
