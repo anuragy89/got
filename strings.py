@@ -21,90 +21,115 @@ def ICO_ROCKET():    return _pe(PEMOJI_ROCKET,    "🚀")
 def ICO_JOYSTICK():  return _pe(PEMOJI_JOYSTICK,  "🕹️")
 def ICO_MEDAL():     return _pe(PEMOJI_MEDAL,     "🎖️")
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  START — PRIVATE
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def start_private(name: str) -> str:
-    # Kept under 1024 chars (Telegram caption limit).
-    # No box-drawing chars (┌│└─) inside <b> tags — Telegram HTML rejects them.
     return (
-        f"{ICO_ROCKET()} <b>Hey {name}, welcome to WordGrid Bot!</b>\n\n"
-        f"{ICO_PUZZLE()} I'm a <b>Word Grid Puzzle Game Bot</b> for Telegram groups.\n"
-        f"Drop a themed grid — players find hidden words!\n\n"
-        f"<b>How to play</b>\n"
-        f"{ICO_JOYSTICK()} Bot sends a colourful grid in your group\n"
-        f"{ICO_LIGHTNING()} Type any hidden word to claim it\n"
-        f"{ICO_FIRE()} Chain words for up to <b>3x</b> combo bonus\n"
-        f"{ICO_TROPHY()} Most words found = <b>WINNER</b>\n\n"
-        f"<b>20 Themes</b> — Animals, Space, Bollywood, Cricket, Food, Ocean and more!\n\n"
-        f"{ICO_DIAMOND()} <b>Add me to your group and start playing now!</b>"
+        f"👋 <b>Hey {name}! Welcome to WordGrid Bot!</b>\n\n"
+
+        f"{ICO_PUZZLE()} <b>What is this?</b>\n"
+        f"A <b>Word Grid Puzzle Game</b> for Telegram groups!\n"
+        f"A themed grid drops — players race to find hidden words.\n\n"
+
+        f"{ICO_JOYSTICK()} <b>How to play</b>\n"
+        f"› Bot sends a colourful grid in your group\n"
+        f"› Type any hidden word to claim it\n"
+        f"› Chain words for up to {ICO_FIRE()} <b>3× combo bonus!</b>\n"
+        f"› Most points at the end = {ICO_CROWN()} <b>WINNER</b>\n\n"
+
+        f"{ICO_STAR()} <b>20 Themes</b> — Animals, Space, Bollywood,\n"
+        f"Cricket, Food, Ocean, Science & more!\n\n"
+
+        f"{ICO_DIAMOND()} <b>Add me to your group and let's play!</b>"
     )
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  START — GROUP
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def start_group() -> str:
     return (
         f"{ICO_PUZZLE()} <b>WordGrid Bot is ready!</b>\n\n"
-        f"Use /newgame to start a round.\n"
-        f"Use /help to see all commands."
+        f"› /newgame — Start a new round\n"
+        f"› /help — See all commands\n\n"
+        f"{ICO_FIRE()} <i>Type /newgame to drop the first grid!</i>"
     )
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  NEW GROUP WELCOME
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def new_group_welcome(title: str) -> str:
     return (
         f"{ICO_ROCKET()} <b>WordGrid Bot just landed in {title}!</b>\n\n"
+
         f"{ICO_JOYSTICK()} I bring <b>Word Grid Puzzle Games</b> to your group.\n\n"
-        f"<b>┌ Quick start</b>\n"
-        f"<b>│</b> /newgame — Start round 1\n"
-        f"<b>│</b> /newhard — Start hard round 1\n"
-        f"<b>│</b> /hint — Get a letter hint during a game\n"
-        f"<b>│</b> /theme — Pick a fun theme\n"
-        f"<b>│</b> /leaderboard — See top players\n"
-        f"<b>│</b> /help — Full command list\n"
-        f"<b>└────────────────────</b>\n\n"
-        f"<b>┌ 12 Progressive Rounds</b>\n"
-        f"<b>│</b> R1: 30s · 3 words · 4×4 grid\n"
-        f"<b>│</b> R6: 3m · 8 words · 8×8 grid\n"
-        f"<b>│</b> R12: 6m · 14 words · 11×11 grid\n"
-        f"<b>└────────────────────</b>\n\n"
-        f"{ICO_CROWN()} Ready? Type /newgame to begin!"
+
+        f"<b>--- Quick Start ---</b>\n"
+        f"› /newgame — Start round 1\n"
+        f"› /newhard — Start a hard round\n"
+        f"› /hint — Get a letter hint mid-game\n"
+        f"› /theme — Pick a fun theme\n"
+        f"› /leaderboard — See top players\n"
+        f"› /help — Full command list\n\n"
+
+        f"<b>--- 12 Progressive Rounds ---</b>\n"
+        f"› R1: 2m · 4 words · 5×5 grid\n"
+        f"› R6: 3.5m · 8 words · 8×8 grid\n"
+        f"› R12: 7.5m · 14 words · 11×11 grid\n\n"
+
+        f"{ICO_CROWN()} <b>Ready? Type /newgame to begin!</b>"
     )
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  HELP
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def help_text() -> str:
     return (
         f"{ICO_PUZZLE()} <b>WordGrid Bot — Commands</b>\n\n"
+
         f"{ICO_JOYSTICK()} <b>Game</b>\n"
-        f"  /newgame — Start round 1 (random theme)\n"
-        f"  /newhard — Start hard round 1 (random theme)\n"
-        f"  /newgame [theme] — e.g. /newgame space\n"
-        f"  /theme — Browse & pick a theme\n"
-        f"  /hint — Reveal hints for all hidden words\n"
-        f"  /endgame — End round early (admins)\n\n"
+        f"› /newgame — Start round 1 (random theme)\n"
+        f"› /newhard — Start a hard round\n"
+        f"› /newgame [theme] — e.g. /newgame space\n"
+        f"› /theme — Browse & pick a theme\n"
+        f"› /hint — Reveal hints for unfound words\n"
+        f"› /endgame — End round early (admins)\n\n"
+
         f"{ICO_TROPHY()} <b>Leaderboard</b>\n"
-        f"  /leaderboard — This group's top 10\n"
-        f"  /globalboard — All-time global top 10\n"
-        f"  /mystats — Your personal stats\n"
-        f"  /me — Your beautiful profile card\n"
-        f"  /resetboard — Reset group board (admins)\n\n"
+        f"› /leaderboard — This group's top 10\n"
+        f"› /globalboard — All-time global top 10\n"
+        f"› /mystats — Your personal stats\n"
+        f"› /me — Your profile card\n"
+        f"› /resetboard — Reset group board (admins)\n\n"
+
         f"{ICO_FIRE()} <b>20 Themes</b>\n"
         f"  animals • fruits • ocean • space • sports\n"
-        f"  countries • food • bollywood • science • technology\n"
+        f"  countries • food • bollywood • science • tech\n"
         f"  mythology • music • geography • movies • history\n"
         f"  cricket • nature • vehicles • bodyparts • games\n\n"
+
         f"{ICO_LIGHTNING()} <b>12 Progressive Rounds</b>\n"
-        f"  R1: 30s · 3 words · 4×4  →  R6: 3m · 8 words · 8×8\n"
-        f"  R12: 6m · 14 words · 11×11\n\n"
-        f"{ICO_STAR()} <b>Combo</b>\n"
+        f"  R1: 2m · 4 words · 5×5  →  R12: 7.5m · 14 words · 11×11\n\n"
+
+        f"{ICO_STAR()} <b>Combo Multipliers</b>\n"
         f"  2 in a row → ×1.5  |  3 → ×2.0\n"
         f"  4 → ×2.5  |  5+ → ×3.0"
     )
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  GRID CAPTION (shown under the grid image)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def game_start_caption(theme_name, theme_emoji, round_num, n_words, duration, grid_size,
                        words=None, found_words=None) -> str:
-    """
-    Caption shown under the grid image.
-    When words/found_words are provided, inline hints replace the old
-    'Find X hidden words' line — each unfound word shows first+last letter,
-    each found word shows a ✅ tick.
-    """
     header = (
         f"{ICO_PUZZLE()} <b>Round {round_num} — {theme_emoji} {theme_name}!</b>\n"
         f"{ICO_LIGHTNING()} Timer: <b>{duration}s</b>  |  "
-        f"{ICO_STAR()} Build combos for bonus points!\n\n"
+        f"{ICO_STAR()} Combos give bonus points!\n\n"
     )
 
     if words:
@@ -120,23 +145,30 @@ def game_start_caption(theme_name, theme_emoji, round_num, n_words, duration, gr
                     masked = w[0] + " _ " + w[-1]
                 else:
                     masked = w[0] + " _" * (len(w) - 2) + " " + w[-1]
-                hint_lines.append(f"💡 <code>{masked}</code>  <i>({len(w)})</i>")
+                hint_lines.append(f"💡 <code>{masked}</code>  <i>({len(w)} letters)</i>")
         return header + "\n".join(hint_lines)
 
-    # Fallback when words not yet available (shouldn't normally happen)
     return (
         header +
         f"Find <b>{n_words} hidden words</b> in the <b>{grid_size}×{grid_size}</b> grid!"
     )
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  WORD FOUND
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def word_found(name, word, pts, combo, left) -> str:
-    combo_txt = f"  {ICO_FIRE()} ×{combo} combo!" if combo >= 2 else ""
+    combo_txt = f"  {ICO_FIRE()} <b>×{combo} combo!</b>" if combo >= 2 else ""
     return (
-        f"{ICO_STAR()} <b>{name}</b> found <code>{word}</code>! "
-        f"<b>+{pts} pts</b>{combo_txt}\n"
+        f"{ICO_STAR()} <b>{name}</b> found <code>{word}</code>!"
+        f"  <b>+{pts} pts</b>{combo_txt}\n"
         f"<i>{left} word(s) still hidden</i>"
     )
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  HINT
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def hint_text(hint: str, length: int) -> str:
     return (
         f"💡 <b>Hint!</b>  ({length} letters)\n"
@@ -144,107 +176,148 @@ def hint_text(hint: str, length: int) -> str:
     )
 
 def no_hint_text() -> str:
-    return "💡 No unfound words left to hint!"
+    return f"💡 <i>No unfound words left to hint!</i>"
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  ROUND END
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MEDALS = ["🥇", "🥈", "🥉"]
 
 def round_end(summary, missed, theme_name, round_num, max_rounds, round_complete=False) -> str:
     is_final = (round_num >= max_rounds)
 
-    # ── Blockquote 1: Game Over ──────────────────────────────────
-    q1 = "🏁 <b>GAME OVER!</b> 🎉" if is_final else "🎉 <b>Game Over!</b> 🎉"
+    # ── Header
+    if is_final:
+        header = f"🎉 {ICO_CROWN()} <b>FINAL Round {round_num} Over! — {theme_name}</b> {ICO_CROWN()} 🎉"
+    else:
+        header = f"🎉 {ICO_FIRE()} <b>Round {round_num} Over! — {theme_name}</b> {ICO_FIRE()} 🎉"
 
-    # ── Blockquote 2: Round Summary + players ───────────────────
-    summary_lines = ["--- Round Summary ---"]
+    lines = [header, ""]
+    lines.append("<b>--- Round Summary ---</b>")
+    lines.append("")
+
+    # ── Scores
     if not summary:
-        summary_lines.append("<i>No one scored this round!</i>")
+        lines.append("<i>No one scored this round!</i>")
     else:
         for i, row in enumerate(summary[:5]):
-            med = MEDALS[i] if i < 3 else f"{i+1}."
-            summary_lines.append(
-                f"{med} <b>{row['name']}</b>: {row['score']} points  <i>({row['words']} words)</i>"
+            med     = MEDALS[i] if i < 3 else f"  {i+1}."
+            uid     = row.get("user_id")
+            name    = row.get("name", "Player")
+            mention = f'<a href="tg://user?id={uid}">{name}</a>' if uid else f"<b>{name}</b>"
+            lines.append(
+                f"{med} {mention}: <b>{row['score']} points</b>  <i>({row['words']} words)</i>"
             )
+        lines.append("")
+        uid0     = summary[0].get("user_id")
+        name0    = summary[0].get("name", "Player")
+        mention0 = f'<a href="tg://user?id={uid0}">{name0}</a>' if uid0 else f"<b>{name0}</b>"
+        lines.append(f"{ICO_TROPHY()} <b>Winner:</b> {mention0} 🎉")
+
+    # ── Missed words
     if missed:
-        summary_lines.append("")
-        summary_lines.append(f"{ICO_PUZZLE()} <b>Missed:</b> {', '.join(missed)}")
-    q2 = "\n".join(summary_lines)
+        lines.append("")
+        lines.append(
+            f"{ICO_PUZZLE()} <b>Missed:</b> {', '.join(f'<code>{w}</code>' for w in missed)}"
+        )
 
-    # ── Blockquote 3: Next round / end message ───────────────────
+    lines.append("")
+
+    # ── Footer
     if is_final:
-        q3 = (
-            f"🏁 <b>All 12 rounds complete! Great game!</b>\n"
-            f"Thanks for playing, start another game by /newhard or /newgame."
-        )
+        lines.append(f"🏁 {ICO_STAR()} <b>All 12 rounds complete! Great game!</b>")
+        lines.append(f"{ICO_ROCKET()} Thanks for playing — start fresh with /newhard or /newgame.")
     elif round_complete:
-        q3 = (
-            f"{ICO_ROCKET()} All words found! Round {round_num + 1} starts automatically in 10s...\n"
-            f"Thanks for playing start another game by /newhard or /newgame."
+        lines.append(
+            f"{ICO_LIGHTNING()} <b>All words found!</b> "
+            f"Round {round_num + 1} starts automatically in 10s…"
         )
+        lines.append(f"{ICO_ROCKET()} Thanks for playing — next game: /newhard or /newgame.")
     else:
-        q3 = (
-            f"⏰ <b>Time's up!</b> Not all words were found.\n"
-            f"Thanks for playing start another game by /newhard or /newgame."
-        )
+        lines.append(f"⏰ <b>Time's up!</b> Not all words were found.")
+        lines.append(f"{ICO_ROCKET()} Thanks for playing — start another game by /newhard or /newgame.")
 
-    return (
-        f"<blockquote>{q1}</blockquote>\n"
-        f"<blockquote>{q2}</blockquote>\n"
-        f"<blockquote>{q3}</blockquote>"
-    )
-
-def leaderboard_text(rows, title) -> str:
-    if not rows:
-        return f"{ICO_TROPHY()} <b>{title}</b>\n\nNo scores yet — play /newgame to get started!"
-    lines = [f"{ICO_TROPHY()} <b>{title}</b>", "━" * 26]
-    for i, row in enumerate(rows):
-        med  = MEDALS[i] if i < 3 else f"  {i+1}."
-        wf   = row.get("words_found", 0)
-        uid  = row.get("user_id")
-        name = row.get("name", "Player")
-        # Tappable mention — works for every user regardless of username
-        mention = f'<a href="tg://user?id={uid}">{name}</a>' if uid else f"<b>{name}</b>"
-        lines.append(f"{med} {mention} — {row['score']} pts <i>({wf} words)</i>")
     return "\n".join(lines)
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  LEADERBOARD
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+def leaderboard_text(rows, title) -> str:
+    if not rows:
+        return (
+            f"{ICO_TROPHY()} <b>{title}</b>\n\n"
+            f"<i>No scores yet — play /newgame to get started!</i>"
+        )
+    lines = [
+        f"{ICO_TROPHY()} <b>{title}</b>",
+        "",
+        "<b>--- Top Players ---</b>",
+        "",
+    ]
+    for i, row in enumerate(rows):
+        med     = MEDALS[i] if i < 3 else f"  {i+1}."
+        wf      = row.get("words_found", 0)
+        uid     = row.get("user_id")
+        name    = row.get("name", "Player")
+        mention = f'<a href="tg://user?id={uid}">{name}</a>' if uid else f"<b>{name}</b>"
+        lines.append(f"{med} {mention}: <b>{row['score']} pts</b>  <i>({wf} words)</i>")
+    return "\n".join(lines)
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  MY STATS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def my_stats(first_name, doc) -> str:
     return (
         f"{ICO_MEDAL()} <b>Stats — {first_name}</b>\n\n"
-        f"{ICO_STAR()} Score:       <b>{doc.get('score',0):,}</b>\n"
-        f"{ICO_PUZZLE()} Words found: <b>{doc.get('words_found',0):,}</b>\n"
+        f"<b>--- Your Numbers ---</b>\n\n"
+        f"{ICO_STAR()} Score:        <b>{doc.get('score', 0):,}</b>\n"
+        f"{ICO_PUZZLE()} Words found:  <b>{doc.get('words_found', 0):,}</b>\n"
     )
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  BOT STATS (owner only)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def bot_stats(users, groups) -> str:
     return (
         f"{ICO_DIAMOND()} <b>Bot Stats</b>\n\n"
-        f"👥 Users:  <b>{users:,}</b>\n"
-        f"💬 Groups: <b>{groups:,}</b>\n"
+        f"<b>--- Overview ---</b>\n\n"
+        f"👥 Users:   <b>{users:,}</b>\n"
+        f"💬 Groups:  <b>{groups:,}</b>\n"
     )
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  BROADCAST (owner only)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 BROADCAST_USAGE = (
     "📢 <b>Broadcast</b>\n\n"
-    "/broadcast all &lt;msg&gt; — Users + Groups\n"
-    "/broadcast users &lt;msg&gt; — Users only\n"
-    "/broadcast groups &lt;msg&gt; — Groups only\n\n"
+    "› /broadcast all &lt;msg&gt; — Users + Groups\n"
+    "› /broadcast users &lt;msg&gt; — Users only\n"
+    "› /broadcast groups &lt;msg&gt; — Groups only\n\n"
     "<i>HTML formatting supported.</i>"
 )
 
 def broadcast_done(sent, failed, total) -> str:
     return (
         f"📢 <b>Broadcast Complete</b>\n\n"
-        f"✅ Sent:   <b>{sent}</b>\n"
-        f"❌ Failed: <b>{failed}</b>\n"
-        f"📊 Total:  <b>{total}</b>"
+        f"<b>--- Result ---</b>\n\n"
+        f"✅ Sent:    <b>{sent}</b>\n"
+        f"❌ Failed:  <b>{failed}</b>\n"
+        f"📊 Total:   <b>{total}</b>"
     )
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  IDLE NUDGE MESSAGES
-#  Sent to groups that haven't played in a while
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 IDLE_NUDGES = [
     (
         f"{ICO_JOYSTICK()} <b>Getting bored in here?</b> 😴\n"
-        f"Wake everyone up — type /newgame and drop a word grid! 🎮"
+        f"Wake everyone up — /newgame and drop a word grid! 🎮"
     ),
     (
         f"{ICO_FIRE()} <b>The grid is waiting...</b> 🧩\n"
@@ -252,15 +325,15 @@ IDLE_NUDGES = [
     ),
     (
         f"{ICO_ROCKET()} <b>Psst! Still alive in here?</b> 👀\n"
-        f"Let's play Word Grid — type /newgame to fire one up! 🚀"
+        f"Fire up a Word Grid — /newgame and let's go! 🚀"
     ),
     (
         f"{ICO_LIGHTNING()} <b>No game? No fun!</b> ⚡\n"
-        f"Challenge the whole group right now — /newgame to drop a fresh grid!"
+        f"Challenge the whole group right now — /newgame!"
     ),
     (
         f"{ICO_CROWN()} <b>Who's the word champion here?</b> 🏆\n"
-        f"Only one way to find out... /newgame and let's settle it! 👑"
+        f"Only one way to find out — /newgame and settle it! 👑"
     ),
     (
         f"{ICO_STAR()} <b>Break's over!</b> ⭐\n"
