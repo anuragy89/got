@@ -187,58 +187,57 @@ MEDALS = ["🥇", "🥈", "🥉"]
 def round_end(summary, missed, theme_name, round_num, max_rounds, round_complete=False) -> str:
     is_final = (round_num >= max_rounds)
 
-    # ── Header  (matches screenshot: 🎉 Game Over! 🎉 " )
+    # ── Header (outside the quote bubble)
     if is_final:
-        header = f'🎉 {ICO_CROWN()} <b>Game Over!</b> {ICO_TROPHY()} \u201d'
+        header = f'🎉 {ICO_CROWN()} <b>Game Over!</b> {ICO_TROPHY()}'
     else:
-        header = f'🎉 {ICO_FIRE()} <b>Game Over!</b> {ICO_FIRE()} \u201d'
+        header = f'🎉 {ICO_FIRE()} <b>Game Over!</b> {ICO_FIRE()}'
 
-    lines = [header, ""]
-    lines.append("<b>--- Round Summary ---</b>")
-    lines.append("")
+    # ── Inner content (goes inside blockquote bubble)
+    inner = []
+    inner.append("<b>--- Round Summary ---</b>")
+    inner.append("")
 
     # ── Scores
     if not summary:
-        lines.append("<i>No one scored this round!</i>")
+        inner.append("<i>No one scored this round!</i>")
     else:
         for i, row in enumerate(summary[:5]):
             med     = MEDALS[i] if i < 3 else f"  {i+1}."
             uid     = row.get("user_id")
             name    = row.get("name", "Player")
             mention = f'<a href="tg://user?id={uid}">{name}</a>' if uid else f"<b>{name}</b>"
-            lines.append(
+            inner.append(
                 f"{med} {mention}: <b>{row['score']} points</b>  <i>({row['words']} words)</i>"
             )
-        lines.append("")
-        uid0     = summary[0].get("user_id")
-        name0    = summary[0].get("name", "Player")
-        mention0 = f'<a href="tg://user?id={uid0}">{name0}</a>' if uid0 else f"<b>{name0}</b>"
-        lines.append(f"{ICO_TROPHY()} <b>Winner:</b> {mention0} 🎉")
+
 
     # ── Missed words
     if missed:
-        lines.append("")
-        lines.append(
-            f"{ICO_PUZZLE()} <b>Missed:</b> {', '.join(f'<code>{w}</code>' for w in missed)}"
+        inner.append("")
+        inner.append(
+            f"{ICO_PUZZLE()} <b>Missed:</b> {', '.join(missed)}"
         )
 
-    lines.append("")
-
-    # ── Footer  (matches screenshot style)
+    # ── Footer
+    inner.append("")
     if is_final:
-        lines.append(f"🏁 {ICO_STAR()} <b>All {max_rounds} rounds complete! Great game!</b>")
-        lines.append(f"{ICO_ROCKET()} Thanks for playing — start fresh with /newhard or /newgame.")
+        inner.append(f"🏁 {ICO_STAR()} <b>All {max_rounds} rounds complete! Great game!</b>")
+        inner.append(f"{ICO_ROCKET()} Thanks for playing — start fresh with /newhard or /newgame.")
     elif round_complete:
-        lines.append(
+        inner.append(
             f"{ICO_LIGHTNING()} <b>All words found!</b> "
             f"Round {round_num + 1} starts automatically in 10s\u2026"
         )
-        lines.append(f"{ICO_ROCKET()} Thanks for playing — start another game by /newhard or /newgame.")
+        inner.append(f"{ICO_ROCKET()} Thanks for playing — start another game by /newhard or /newgame.")
     else:
-        lines.append(f"\u23f0 <b>Time's up!</b> Not all words were found.")
-        lines.append(f"{ICO_ROCKET()} Thanks for playing — start another game by /newhard or /newgame.")
+        inner.append(f"\u23f0 <b>Time's up!</b> Not all words were found.")
+        inner.append(f"{ICO_ROCKET()} Thanks for playing — start another game by /newhard or /newgame.")
 
-    return "\n".join(lines)
+    # ── Wrap body in Telegram blockquote (renders as indented quote bubble with sidebar)
+    quoted_body = "<blockquote>" + "\n".join(inner) + "</blockquote>"
+
+    return header + "\n\n" + quoted_body
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
