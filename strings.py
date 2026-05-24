@@ -187,11 +187,11 @@ MEDALS = ["🥇", "🥈", "🥉"]
 def round_end(summary, missed, theme_name, round_num, max_rounds, round_complete=False) -> str:
     is_final = (round_num >= max_rounds)
 
-    # ── Header
+    # ── Header  (matches screenshot: 🎉 Game Over! 🎉 " )
     if is_final:
-        header = f"🎉 {ICO_CROWN()} <b>FINAL Round {round_num} Over! — {theme_name}</b> {ICO_CROWN()} 🎉"
+        header = f'🎉 {ICO_CROWN()} <b>Game Over!</b> {ICO_TROPHY()} \u201d'
     else:
-        header = f"🎉 {ICO_FIRE()} <b>Round {round_num} Over! — {theme_name}</b> {ICO_FIRE()} 🎉"
+        header = f'🎉 {ICO_FIRE()} <b>Game Over!</b> {ICO_FIRE()} \u201d'
 
     lines = [header, ""]
     lines.append("<b>--- Round Summary ---</b>")
@@ -224,18 +224,18 @@ def round_end(summary, missed, theme_name, round_num, max_rounds, round_complete
 
     lines.append("")
 
-    # ── Footer
+    # ── Footer  (matches screenshot style)
     if is_final:
-        lines.append(f"🏁 {ICO_STAR()} <b>All 12 rounds complete! Great game!</b>")
+        lines.append(f"🏁 {ICO_STAR()} <b>All {max_rounds} rounds complete! Great game!</b>")
         lines.append(f"{ICO_ROCKET()} Thanks for playing — start fresh with /newhard or /newgame.")
     elif round_complete:
         lines.append(
             f"{ICO_LIGHTNING()} <b>All words found!</b> "
-            f"Round {round_num + 1} starts automatically in 10s…"
+            f"Round {round_num + 1} starts automatically in 10s\u2026"
         )
-        lines.append(f"{ICO_ROCKET()} Thanks for playing — next game: /newhard or /newgame.")
+        lines.append(f"{ICO_ROCKET()} Thanks for playing — start another game by /newhard or /newgame.")
     else:
-        lines.append(f"⏰ <b>Time's up!</b> Not all words were found.")
+        lines.append(f"\u23f0 <b>Time's up!</b> Not all words were found.")
         lines.append(f"{ICO_ROCKET()} Thanks for playing — start another game by /newhard or /newgame.")
 
     return "\n".join(lines)
