@@ -154,7 +154,8 @@ def game_start_caption(theme_name, theme_emoji, mode, n_words, duration, grid_si
                 else:
                     masked = w[0] + " _" * (len(w) - 2) + " " + w[-1]
                 hint_lines.append(f"💡 <code>{masked}</code>  <i>({len(w)} letters)</i>")
-        return header + "\n".join(hint_lines)
+        tagline = f"\n<i>「 Type a word in the chat to score! 」</i>"
+        return header + "\n".join(hint_lines) + tagline
 
     return (
         header +
