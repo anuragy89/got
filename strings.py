@@ -124,10 +124,18 @@ def help_text() -> str:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  GRID CAPTION (shown under the grid image)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-def game_start_caption(theme_name, theme_emoji, round_num, n_words, duration, grid_size,
+def game_start_caption(theme_name, theme_emoji, mode, n_words, duration, grid_size,
                        words=None, found_words=None) -> str:
+    # mode can be "easy", "hard", or legacy int (treated as "easy")
+    if isinstance(mode, int):
+        mode_label = "Easy Mode"
+    elif str(mode).lower() == "hard":
+        mode_label = "Hard Mode"
+    else:
+        mode_label = "Easy Mode"
+
     header = (
-        f"{ICO_PUZZLE()} <b>Round {round_num} — {theme_emoji} {theme_name}!</b>\n"
+        f"{ICO_PUZZLE()} <b>{mode_label} — {theme_emoji} {theme_name}!</b>\n"
         f"{ICO_LIGHTNING()} Timer: <b>{duration}s</b>  |  "
         f"{ICO_STAR()} Combos give bonus points!\n\n"
     )
