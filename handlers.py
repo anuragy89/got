@@ -506,6 +506,7 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                         caption=new_caption,
                         parse_mode=ParseMode.HTML,
                     ),
+                    reply_markup=game_action_kb() if not session.is_hard else hard_action_kb(),
                 )
             except (TelegramError, BadRequest):
                 pass
