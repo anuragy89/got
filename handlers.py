@@ -8,7 +8,7 @@ from telegram.constants import ParseMode, ChatType
 from telegram.error import TelegramError, Forbidden, BadRequest
 from telegram.ext import ContextTypes
 
-from render_cards import render_leaderboard, render_rank_tiers, render_me_card
+from render_cards import render_leaderboard, render_me_card
 import database as db
 from config import OWNER_ID, BROADCAST_DELAY, IDLE_NUDGE_AFTER
 from game import (
@@ -858,4 +858,5 @@ async def error_handler(update: object, ctx: ContextTypes.DEFAULT_TYPE):
                 "⚠️ Something went wrong. Please try again in a moment."
             )
         except TelegramError:
+            passamError:
             pass
