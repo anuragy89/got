@@ -1,6 +1,5 @@
 """
 WordGrid Bot — Main entry point (polling mode)
-Optimised for Heroku Standard-2X with 10 k+ groups.
 """
 
 import asyncio
@@ -30,7 +29,6 @@ from handlers import (
     idle_nudge_job, error_handler,
 )
 
-# ── Logging ───────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | %(name)s — %(message)s",
@@ -45,17 +43,13 @@ log = logging.getLogger("wordgrid")
 def build_app() -> Application:
     updater_request = HTTPXRequest(
         connection_pool_size=8,
-        read_timeout=35,
-        write_timeout=30,
-        connect_timeout=30,
-        pool_timeout=30,
+        read_timeout=35, write_timeout=30,
+        connect_timeout=30, pool_timeout=30,
     )
     bot_request = HTTPXRequest(
         connection_pool_size=16,
-        read_timeout=30,
-        write_timeout=30,
-        connect_timeout=30,
-        pool_timeout=30,
+        read_timeout=30, write_timeout=30,
+        connect_timeout=30, pool_timeout=30,
     )
 
     app = (
@@ -67,7 +61,6 @@ def build_app() -> Application:
         .build()
     )
 
-    # ── Commands ──
     app.add_handler(CommandHandler("start",       cmd_start))
     app.add_handler(CommandHandler("help",        cmd_help))
     app.add_handler(CommandHandler("theme",       cmd_theme))
@@ -84,23 +77,16 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("broadcast",   cmd_broadcast))
     app.add_handler(CommandHandler("stats",       cmd_stats))
 
-    # ── Inline buttons ──
     app.add_handler(CallbackQueryHandler(on_callback))
-
-    # ── Bot added/removed from group ──
     app.add_handler(
         ChatMemberHandler(on_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER)
     )
-
-    # ── Word guesses in groups ──
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND & filters.ChatType.GROUPS,
             on_message,
         )
     )
-
-    # ── Global error handler ──
     app.add_error_handler(error_handler)
 
     return app
@@ -111,7 +97,6 @@ async def post_init(app: Application):
     me = await app.bot.get_me()
     log.info(f"✅ Bot started as @{me.username}")
 
-    # Schedule idle nudge job — checks every IDLE_NUDGE_CHECK seconds
     if app.job_queue is not None:
         app.job_queue.run_repeating(
             idle_nudge_job,
@@ -121,7 +106,7 @@ async def post_init(app: Application):
         )
         log.info(f"⏰ Idle nudge job scheduled every {IDLE_NUDGE_CHECK}s")
     else:
-        log.warning("JobQueue not available — idle nudge disabled. Install: pip install 'python-telegram-bot[job-queue]'")
+        log.warning("JobQueue not available — idle nudge disabled.")
 
 
 async def post_shutdown(app: Application):
