@@ -17,6 +17,7 @@ from game import (
     NORMAL_GRID_SIZE, NORMAL_N_WORDS_MIN, NORMAL_N_WORDS_MAX, NORMAL_DURATION,
     HARD_GRID_SIZE, HARD_N_WORDS_MIN, HARD_N_WORDS_MAX,
     HARD_POINTS_PER_WORD, HARD_FIRST_PTS,
+    EASY_WORD_MAX_LEN, HARD_WORD_MIN_LEN,
     touch_activity, idle_seconds,
 )
 from keyboards import (
@@ -131,24 +132,46 @@ async def _end_round(chat_id, session, ctx, from_timer=False):
 
 
 async def _timer_task(chat_id, session, ctx):
-    warn_after = session.duration - 30
-    if warn_after > 0:
-        await asyncio.sleep(warn_after)
+    duration = session.duration
+
+    # ── Warning 1: 100 seconds left ──────────────────────────────
+    warn1_after = duration - 100
+    if warn1_after > 0:
+        await asyncio.sleep(warn1_after)
         if not session.active:
             return
         try:
             warn_msg = await ctx.bot.send_message(
                 chat_id,
-                f"{ICO_FIRE()} <b>30 seconds left!</b> Find more words fast!",
+                f"⚠️ <b>100 seconds left!</b> Hurry up and find more words! {ICO_FIRE()}",
                 parse_mode=ParseMode.HTML,
             )
             session.msg_ids.append(warn_msg.message_id)
         except TelegramError:
             pass
-        await asyncio.sleep(30)
     else:
-        await asyncio.sleep(session.duration)
+        await asyncio.sleep(max(0, warn1_after + duration))  # already past
 
+    if not session.active:
+        return
+
+    # ── Warning 2: 15 seconds left ───────────────────────────────
+    warn2_after = 85  # 100 - 15 = 85 more seconds after first warning
+    await asyncio.sleep(warn2_after)
+    if not session.active:
+        return
+    try:
+        warn_msg2 = await ctx.bot.send_message(
+            chat_id,
+            f"🚨 <b>ONLY 15 SECONDS LEFT!</b> Last chance! {ICO_LIGHTNING()}",
+            parse_mode=ParseMode.HTML,
+        )
+        session.msg_ids.append(warn_msg2.message_id)
+    except TelegramError:
+        pass
+
+    # ── Final 15 second wait ─────────────────────────────────────
+    await asyncio.sleep(15)
     if session.active:
         await _end_round(chat_id, session, ctx, from_timer=True)
 
@@ -163,7 +186,7 @@ async def _launch_normal(chat_id: int, theme_key: str, ctx) -> None:
     loop = asyncio.get_event_loop()
     try:
         grid, words, placed = await loop.run_in_executor(
-            None, build_puzzle, theme_key, size, n_words
+            None, build_puzzle, theme_key, size, n_words, True  # easy_mode=True
         )
     except Exception as e:
         log.error(f"_launch_normal build_puzzle failed chat={chat_id}: {e}")
@@ -196,7 +219,7 @@ async def _launch_normal(chat_id: int, theme_key: str, ctx) -> None:
     touch_activity(chat_id)
 
     caption = game_start_caption(
-        t["name"], t["emoji"], 1, len(words), NORMAL_DURATION, size,
+        t["name"], t["emoji"], "easy", len(words), NORMAL_DURATION, size,
         words=words, found_words=[],
     )
     try:
@@ -272,10 +295,10 @@ async def _launch_hard(chat_id: int, ctx) -> None:
     touch_activity(chat_id)
 
     caption = game_start_caption(
-        t["name"], t["emoji"], 1, len(words), session.duration, size,
+        t["name"], t["emoji"], "hard", len(words), session.duration, size,
         words=words, found_words=[],
     )
-    caption = "🔥 <b>HARD MODE</b> — " + caption[caption.index("<b>Round"):]
+    caption = "🔥 <b>HARD MODE</b> — " + caption[caption.index("<b>"):] if "<b>" in caption else caption
 
     try:
         msg = await ctx.bot.send_photo(
@@ -470,12 +493,12 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             try:
                 t           = THEMES[session.theme]
                 new_caption = game_start_caption(
-                    t["name"], t["emoji"], 1,
+                    t["name"], t["emoji"], "hard" if session.is_hard else "easy",
                     len(session.words), session.duration, session.grid_size,
                     words=session.words, found_words=session.found_words,
                 )
                 if session.is_hard:
-                    new_caption = f"🔥 <b>HARD MODE</b> — {new_caption[new_caption.index('<b>Round'):]}"
+                    new_caption = f"🔥 <b>HARD MODE</b> — {new_caption[new_caption.index('<b>'):]}" if "<b>" in new_caption else new_caption
                 await ctx.bot.edit_message_media(
                     chat_id=chat.id, message_id=session.grid_msg_id,
                     media=InputMediaPhoto(
