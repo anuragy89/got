@@ -184,17 +184,12 @@ def no_hint_text() -> str:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MEDALS = ["🥇", "🥈", "🥉"]
 
-def round_end(summary, missed, theme_name, round_num, max_rounds, round_complete=False) -> str:
-    is_final = (round_num >= max_rounds)
-
+def round_end(summary, missed, theme_name, round_num=1, max_rounds=1, round_complete=False) -> str:
     # ── QUOTE 1: Header
-    if is_final:
-        q1 = f'<blockquote>🎉 {ICO_CROWN()} <b>Game Over!</b> {ICO_TROPHY()} 🎉</blockquote>'
-    else:
-        q1 = f'<blockquote>🎉 {ICO_FIRE()} <b>Game Over!</b> {ICO_FIRE()} 🎉</blockquote>'
+    q1 = f'<blockquote>🎉 {ICO_CROWN()} <b>Game Over!</b> {ICO_TROPHY()} 🎉</blockquote>'
 
-    # ── QUOTE 2: Round Summary + scores + missed
-    summary_lines = ["<b>--- Round Summary ---</b>", ""]
+    # ── QUOTE 2: Scores + missed
+    summary_lines = ["<b>--- Final Scores ---</b>", ""]
     if not summary:
         summary_lines.append("<i>No one scored this round!</i>")
     else:
@@ -214,29 +209,20 @@ def round_end(summary, missed, theme_name, round_num, max_rounds, round_complete
     q2 = "<blockquote>" + "\n".join(summary_lines) + "</blockquote>"
 
     # ── QUOTE 3: Footer
-    if is_final:
+    if round_complete:
         footer_lines = [
-            f"🏁 {ICO_STAR()} <b>All {max_rounds} rounds complete! Great game!</b>",
-            f"{ICO_ROCKET()} Thanks for playing — start fresh with /newhard or /newgame.",
-        ]
-    elif round_complete:
-        footer_lines = [
-            f"{ICO_LIGHTNING()} <b>All words found!</b> Round {round_num + 1} starts automatically in 10s\u2026",
-            f"{ICO_ROCKET()} Thanks for playing — start another game by /newhard or /newgame.",
+            f"🏁 {ICO_STAR()} <b>All words found! Amazing!</b>",
+            f"{ICO_ROCKET()} Play again — /newgame or /newhard!",
         ]
     else:
         footer_lines = [
-            f"\u23f0 <b>Time's up!</b> Not all words were found.",
-            f"{ICO_ROCKET()} Thanks for playing — start another game by /newhard or /newgame.",
+            f"⏰ <b>Time's up!</b> Not all words were found.",
+            f"{ICO_ROCKET()} Try again — /newgame or /newhard!",
         ]
     q3 = "<blockquote>" + "\n".join(footer_lines) + "</blockquote>"
 
     return q1 + "\n" + q2 + "\n" + q3
 
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  LEADERBOARD
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def leaderboard_text(rows, title) -> str:
     if not rows:
         return (
