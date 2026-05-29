@@ -12,20 +12,24 @@ log = logging.getLogger(__name__)
 #  GAME CONSTANTS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-# Normal mode
+# Normal mode (Easy)
 NORMAL_GRID_SIZE  = 10
 NORMAL_N_WORDS_MIN = 10
 NORMAL_N_WORDS_MAX = 15
-NORMAL_DURATION   = 180   # 3 minutes
+NORMAL_DURATION   = 400   # 400 seconds
 
 # Hard mode
 HARD_GRID_SIZE    = 10
 HARD_N_WORDS_MIN  = 10
 HARD_N_WORDS_MAX  = 15
-HARD_DURATION_MIN = 400
-HARD_DURATION_MAX = 500
+HARD_DURATION_MIN = 500
+HARD_DURATION_MAX = 500   # fixed 500 seconds
 HARD_POINTS_PER_WORD = 10
 HARD_FIRST_PTS       = 25
+
+# Easy mode: prefer shorter words (3-5 letters); hard mode: prefer longer (6+ letters)
+EASY_WORD_MAX_LEN = 6   # easy words: 3–6 letters
+HARD_WORD_MIN_LEN = 5   # hard words: 5+ letters
 
 # Kept for any legacy imports (not used in logic anymore)
 MAX_ROUNDS = 1
@@ -43,10 +47,7 @@ class GameSession:
         self.is_hard     = is_hard
         self.round_num   = 1       # always 1 — kept so caption helpers don't break
         self.grid_size   = HARD_GRID_SIZE if is_hard else NORMAL_GRID_SIZE
-        self.duration    = (
-            random.randint(HARD_DURATION_MIN, HARD_DURATION_MAX)
-            if is_hard else NORMAL_DURATION
-        )
+        self.duration    = HARD_DURATION_MIN if is_hard else NORMAL_DURATION
 
         self.found_words : list           = []
         self.finders     : Dict[str,dict] = {}
