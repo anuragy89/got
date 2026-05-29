@@ -18,6 +18,10 @@ THEMES = {
             "SWAN","PIGEON","SPARROW","FALCON","VULTURE","TOUCAN","PELICAN","STORK",
             "HERON","IBIS","MACAW","COCKATOO","IGUANA","GECKO","CHAMELEON","TORTOISE",
             "PYTHON","COBRA","MAMBA","MONITOR",
+            # Easy short words added
+            "CAT","DOG","COW","HEN","OWL","EMU","RAM","EWE","YAK","GNU","ASS",
+            "FROG","CRAB","CLAM","CROW","DOVE","LARK","MOLE","NEWT","SLUG","TOAD",
+            "WORM","WASP","MOTH","GNAT","MINK","IBIS","KITE","PUMA","VOLE","WREN",
         ],
         "bg":          (10, 28, 48),
         "header_bg":   (6,  18, 34),
@@ -40,6 +44,8 @@ THEMES = {
             "LONGAN","SOURSOP","BREADFRUIT","CARAMBOLA","FEIJOA","DURIAN","MANGOSTEEN",
             "SANTOL","SALAK","ATEMOYA","CHERIMOYA","ILAMA","JABOTICABA","LANGSAT",
             "MAMEY","PITAYA","TAMARILLO","UVILLA",
+            # Easy short words added
+            "LIME","DATE","PRUNE","OLIVE","LEMON","MELON","PEAR","PLUM","GRAPE",
         ],
         "bg":          (28, 10, 0),
         "header_bg":   (48, 18, 0),
@@ -62,6 +68,9 @@ THEMES = {
             "ANEMONE","BARNACLE","CUTTLEFISH","ISOPOD","AMPHIPOD","COPEPOD",
             "ZOOPLANKTON","PLANKTON","DUGONG","ORCA","BELUGA","PORPOISE","REMORA",
             "PILOTFISH","TRIGGERFISH","WRASSE","PARROTFISH","CLOWNFISH","SURGEONFISH",
+            # Easy short words added
+            "WAVE","TIDE","REEF","SAND","SALT","FOAM","FISH","CARP","BASS","PIKE",
+            "POOL","GULL","TERN","BUOY","PIER","DOCK","PORT","CAPE","ISLE","COVE",
         ],
         "bg":          (0, 20, 45),
         "header_bg":   (0, 30, 60),
@@ -107,6 +116,9 @@ THEMES = {
             "SURFING","SNOWBOARD","SKIING","ICESKATING","FIGURESKATING","SPEEDSKATING",
             "KARATE","TAEKWONDO","AIKIDO","KENDO","SUMO","MUAYTHAI","KICKBOXING",
             "FREEFALL","PARAGLIDING","ROCKCLIMBING","MOUNTAINBIKE",
+            # Easy short words added
+            "RUN","JUMP","SWIM","KICK","PASS","SHOT","GOAL","SAVE","RACE","DIVE",
+            "BOWL","PUTT","SERVE","SPIN","DUNK","LAPS","WARM","COOL","PACE","BOUT",
         ],
         "bg":          (2, 22, 4),
         "header_bg":   (4, 34, 6),
@@ -152,6 +164,9 @@ THEMES = {
             "QORMA","PAYA","SAAG","PANEER","KADHAI","MAKHANI","TIKKA","TANDOORI",
             "GAZPACHO","PAELLA","RISOTTO","GOULASH","PIEROGI","BAKLAVA","HUMMUS",
             "TZATZIKI","MOUSSAKA","TAGINE","INJERA","JOLLOF","POUTINE",
+            # Easy short words added
+            "RICE","BREAD","SOUP","CAKE","MILK","EGGS","MEAT","FISH","TOFU",
+            "SALT","HERB","BEAN","CORN","OATS","YAMS","NUTS","FIGS","CHIPS",
         ],
         "bg":          (28, 6, 16),
         "header_bg":   (50, 10, 24),
@@ -1445,14 +1460,31 @@ def _fill(grid: list, size: int):
                 grid[r][c] = random.choice(alpha)
 
 
-def build_puzzle(theme_key: str, size: int, n_words: int) -> tuple:
-    """Returns (grid, words_list, placed_list)."""
-    # Filter words that fit in this grid size AND are at least 3 letters
-    eligible = [w for w in THEMES[theme_key]["words"] if 3 <= len(w) <= size]
+def build_puzzle(theme_key: str, size: int, n_words: int,
+                 easy_mode: bool = False) -> tuple:
+    """Returns (grid, words_list, placed_list).
+    easy_mode=True  → prefer short words (3-6 letters)
+    easy_mode=False → prefer longer words (5+ letters)
+    """
+    all_words = THEMES[theme_key]["words"]
+
+    if easy_mode:
+        # Prefer 3-6 letter words; fall back to full list if not enough
+        preferred = [w for w in all_words if 3 <= len(w) <= 6 and len(w) <= size]
+        if len(preferred) < n_words:
+            preferred = [w for w in all_words if 3 <= len(w) <= size]
+        eligible = preferred
+    else:
+        # Hard mode: prefer 5+ letter words; fall back if not enough
+        preferred = [w for w in all_words if len(w) >= 5 and len(w) <= size]
+        if len(preferred) < n_words:
+            preferred = [w for w in all_words if 3 <= len(w) <= size]
+        eligible = preferred
+
     if not eligible:
-        eligible = [w for w in THEMES[theme_key]["words"] if len(w) <= size]
-    # Use a larger pool buffer for higher word counts so we always have
-    # enough candidates to successfully place n_words on the grid.
+        eligible = [w for w in all_words if len(w) <= size]
+
+    # Use a larger pool buffer for higher word counts
     pool_size = min(len(eligible), max(n_words + 20, n_words * 3))
     pool = random.sample(eligible, pool_size)
     grid = _empty(size)
