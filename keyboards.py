@@ -118,30 +118,16 @@ def theme_kb() -> InlineKeyboardMarkup:
 
 
 def game_action_kb() -> InlineKeyboardMarkup:
-    """Buttons under the grid image during an active round."""
+    """Single button under the grid image — Add Me only."""
     return InlineKeyboardMarkup([
-        [
-            _url("➕ Add Me",  BOT_INVITE_LINK, style="success"),
-            _url("📢 Updates", UPDATES_CHANNEL, style="primary"),
-        ],
-        [
-            _url("🎮 Play Games", SUPPORT_GROUP, style="primary"),
-            _cb("🚩 End Game",   "cb:endgame",  style="danger"),
-        ],
+        [_url("➕ Add Me", BOT_INVITE_LINK, style="success")],
     ])
 
 
 def hard_action_kb() -> InlineKeyboardMarkup:
-    """Buttons under the grid image during a HARD MODE round."""
+    """Single button under the hard mode grid image — Add Me only."""
     return InlineKeyboardMarkup([
-        [
-            _url("➕ Add Me",    BOT_INVITE_LINK, style="success"),
-            _url("📢 Updates",   UPDATES_CHANNEL, style="primary"),
-        ],
-        [
-            _url("🎮 Play Games", SUPPORT_GROUP,  style="primary"),
-            _cb("🚩 End Game",   "cb:endgame",    style="danger"),
-        ],
+        [_url("➕ Add Me", BOT_INVITE_LINK, style="success")],
     ])
 
 
@@ -189,11 +175,11 @@ def round_over_no_next_kb() -> InlineKeyboardMarkup:
 
 
 def final_round_kb() -> InlineKeyboardMarkup:
-    """After round 12 — full game complete."""
+    """After game over — Leaderboard, Updates, New Game, Add Me."""
     return InlineKeyboardMarkup([
         [
             _cb("🏆 Leaderboard",  "cb:leaderboard",  style="primary"),
-            _cb("🌍 Global Board", "cb:globalboard",  style="primary"),
+            _url("📢 Updates",     UPDATES_CHANNEL,   style="primary"),
         ],
         [
             _cb("🎮 New Game", "theme:random",   style="success"),
