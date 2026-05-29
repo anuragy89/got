@@ -858,5 +858,4 @@ async def error_handler(update: object, ctx: ContextTypes.DEFAULT_TYPE):
                 "⚠️ Something went wrong. Please try again in a moment."
             )
         except TelegramError:
-            passamError:
             pass
