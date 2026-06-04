@@ -137,7 +137,7 @@ def game_start_caption(theme_name, theme_emoji, mode, n_words, duration, grid_si
     header = (
         f"{ICO_PUZZLE()} <b>{mode_label} — {theme_emoji} {theme_name}!</b>\n"
         f"{ICO_LIGHTNING()} Timer: <b>{duration}s</b>  |  "
-        f"{ICO_STAR()} Combos give bonus points!\n\n"
+        f"{ICO_STAR()} score points!\n\n"
     )
 
     if words:
