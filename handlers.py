@@ -2,6 +2,7 @@ import asyncio
 import io
 import logging
 import random
+import time
 
 from telegram import Update, InputMediaPhoto
 from telegram.constants import ParseMode, ChatType
@@ -33,6 +34,7 @@ from strings import (
     leaderboard_text, my_stats, bot_stats,
     BROADCAST_USAGE, broadcast_done,
     hint_text, no_hint_text, IDLE_NUDGES,
+    weekly_tournament_announcement,
     ICO_FIRE, ICO_PUZZLE, ICO_TROPHY, ICO_STAR, ICO_CROWN, ICO_ROCKET,
 )
 
@@ -132,12 +134,27 @@ async def _end_round(chat_id, session, ctx, from_timer=False):
 
 
 async def _timer_task(chat_id, session, ctx):
+    """
+    Anchored to session.started_at (wall-clock) rather than chained
+    relative sleeps. FIX: the old version computed the pre-warning wait
+    as `(duration - 100) + duration` whenever duration <= 100s, which
+    is wrong and made the round overshoot its real end time instead of
+    finishing on schedule. Sleeping against an absolute target offset
+    also self-corrects for any drift from message-send latency, so the
+    round always ends at exactly `duration` seconds regardless of how
+    long the warning messages took to send.
+    """
     duration = session.duration
+    start    = session.started_at
 
-    # ── Warning 1: 100 seconds left ──────────────────────────────
-    warn1_after = duration - 100
-    if warn1_after > 0:
-        await asyncio.sleep(warn1_after)
+    async def _sleep_until(target_offset: float):
+        remaining = target_offset - (time.time() - start)
+        if remaining > 0:
+            await asyncio.sleep(remaining)
+
+    # ── Warning 1: 100 seconds left (skipped for short rounds) ────
+    if duration > 100:
+        await _sleep_until(duration - 100)
         if not session.active:
             return
         try:
@@ -149,29 +166,30 @@ async def _timer_task(chat_id, session, ctx):
             session.msg_ids.append(warn_msg.message_id)
         except TelegramError:
             pass
-    else:
-        await asyncio.sleep(max(0, warn1_after + duration))  # already past
 
     if not session.active:
         return
 
-    # ── Warning 2: 15 seconds left ───────────────────────────────
-    warn2_after = 85  # 100 - 15 = 85 more seconds after first warning
-    await asyncio.sleep(warn2_after)
+    # ── Warning 2: 15 seconds left (skipped for short rounds) ─────
+    if duration > 15:
+        await _sleep_until(duration - 15)
+        if not session.active:
+            return
+        try:
+            warn_msg2 = await ctx.bot.send_message(
+                chat_id,
+                f"🚨 <b>ONLY 15 SECONDS LEFT!</b> Last chance! {ICO_LIGHTNING()}",
+                parse_mode=ParseMode.HTML,
+            )
+            session.msg_ids.append(warn_msg2.message_id)
+        except TelegramError:
+            pass
+
     if not session.active:
         return
-    try:
-        warn_msg2 = await ctx.bot.send_message(
-            chat_id,
-            f"🚨 <b>ONLY 15 SECONDS LEFT!</b> Last chance! {ICO_LIGHTNING()}",
-            parse_mode=ParseMode.HTML,
-        )
-        session.msg_ids.append(warn_msg2.message_id)
-    except TelegramError:
-        pass
 
-    # ── Final 15 second wait ─────────────────────────────────────
-    await asyncio.sleep(15)
+    # ── Round end — lands exactly at `duration`, no drift ─────────
+    await _sleep_until(duration)
     if session.active:
         await _end_round(chat_id, session, ctx, from_timer=True)
 
@@ -528,22 +546,26 @@ async def cmd_leaderboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     if chat.type == ChatType.PRIVATE:
         rows  = await db.global_leaderboard(limit=15)
+        champ = await db.get_global_weekly_champion()
         title = "🌍 Global Leaderboard"
         kb    = globalboard_kb()
     else:
         rows  = await db.group_leaderboard(chat.id, limit=15)
+        champ = await db.get_group_weekly_champion(chat.id)
         title = f"🏆 {chat.title or 'Group Leaderboard'}"
         kb    = leaderboard_kb()
     await update.message.reply_text(
-        leaderboard_text(rows, title), parse_mode=ParseMode.HTML, reply_markup=kb
+        leaderboard_text(rows, title, champion_id=champ.get("user_id")),
+        parse_mode=ParseMode.HTML, reply_markup=kb,
     )
 
 
 async def cmd_globalboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    rows = await db.global_leaderboard()
-    kb   = globalboard_kb()
+    rows  = await db.global_leaderboard()
+    champ = await db.get_global_weekly_champion()
+    kb    = globalboard_kb()
     await update.message.reply_text(
-        leaderboard_text(rows, "🌍 Global Leaderboard"),
+        leaderboard_text(rows, "🌍 Global Leaderboard", champion_id=champ.get("user_id")),
         parse_mode=ParseMode.HTML, reply_markup=kb,
     )
 
@@ -706,6 +728,47 @@ async def idle_nudge_job(ctx: ContextTypes.DEFAULT_TYPE):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  WEEKLY TOURNAMENT JOB
+#  Runs once a week (scheduled in bot.py). For
+#  every active group: pulls that group's
+#  "week" leaderboard (already timestamp-based
+#  in database.py, no reset needed — next week
+#  naturally rolls over), crowns the #1 player,
+#  and posts the results. Does the same for the
+#  global board.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+async def weekly_tournament_job(ctx: ContextTypes.DEFAULT_TYPE):
+    group_ids = await db.all_group_ids()
+    for chat_id in group_ids:
+        try:
+            rows = await db.group_leaderboard(chat_id, limit=3, time_filter="week")
+            if rows:
+                top = rows[0]
+                await db.set_group_weekly_champion(chat_id, top["user_id"], top["name"], top["score"])
+            chat_obj = await ctx.bot.get_chat(chat_id)
+            text = weekly_tournament_announcement(rows, chat_obj.title or "This Group")
+            await ctx.bot.send_message(chat_id, text, parse_mode=ParseMode.HTML)
+        except Forbidden:
+            await db.mark_group_inactive(chat_id)
+        except TelegramError as e:
+            log.warning(f"weekly_tournament_job group={chat_id}: {e}")
+        except Exception as e:
+            log.error(f"weekly_tournament_job group={chat_id}: {e}")
+        await asyncio.sleep(0.05)
+
+    try:
+        grows = await db.global_leaderboard(limit=3, time_filter="week")
+        if grows:
+            gtop = grows[0]
+            await db.set_global_weekly_champion(gtop["user_id"], gtop["name"], gtop["score"])
+    except Exception as e:
+        log.error(f"weekly_tournament_job global: {e}")
+
+    log.info(f"🏆 Weekly tournament announced to {len(group_ids)} group(s)")
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  CALLBACKS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -725,18 +788,24 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elif data == "cb:leaderboard":
         if chat.type == ChatType.PRIVATE:
             rows  = await db.global_leaderboard(limit=15)
+            champ = await db.get_global_weekly_champion()
             title = "🌍 Global Leaderboard"
             kb    = globalboard_kb()
         else:
             rows  = await db.group_leaderboard(chat.id, limit=15)
+            champ = await db.get_group_weekly_champion(chat.id)
             title = f"🏆 {chat.title or 'Group Leaderboard'}"
             kb    = leaderboard_kb()
-        await _safe_edit_text(q, leaderboard_text(rows, title), reply_markup=kb)
+        await _safe_edit_text(
+            q, leaderboard_text(rows, title, champion_id=champ.get("user_id")),
+            reply_markup=kb,
+        )
 
     elif data == "cb:globalboard":
-        rows = await db.global_leaderboard(limit=15)
+        rows  = await db.global_leaderboard(limit=15)
+        champ = await db.get_global_weekly_champion()
         await _safe_edit_text(
-            q, leaderboard_text(rows, "🌍 Global Leaderboard"),
+            q, leaderboard_text(rows, "🌍 Global Leaderboard", champion_id=champ.get("user_id")),
             reply_markup=globalboard_kb(),
         )
 
@@ -746,13 +815,18 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         tfilter = parts[2] if len(parts) > 2 else "alltime"
         if scope == "global":
             rows  = await db.global_leaderboard(limit=15, time_filter=tfilter)
+            champ = await db.get_global_weekly_champion()
             title = "🌍 Global Leaderboard"
             kb    = globalboard_kb(time_filter=tfilter)
         else:
             rows  = await db.group_leaderboard(chat.id, limit=15, time_filter=tfilter)
+            champ = await db.get_group_weekly_champion(chat.id)
             title = f"🏆 {chat.title or 'Group'} Leaderboard"
             kb    = leaderboard_kb(time_filter=tfilter)
-        await _safe_edit_text(q, leaderboard_text(rows, title), reply_markup=kb)
+        await _safe_edit_text(
+            q, leaderboard_text(rows, title, champion_id=champ.get("user_id")),
+            reply_markup=kb,
+        )
 
     elif data == "cb:timeleft":
         session = sessions.get(chat.id)
