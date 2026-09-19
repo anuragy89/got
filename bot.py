@@ -3,6 +3,7 @@ WordGrid Bot — Main entry point (polling mode)
 """
 
 import asyncio
+import datetime as dt
 import logging
 import sys
 
@@ -26,7 +27,7 @@ from handlers import (
     cmd_endgame, cmd_resetboard,
     cmd_broadcast, cmd_stats,
     on_message, on_callback, on_my_chat_member,
-    idle_nudge_job, error_handler,
+    idle_nudge_job, weekly_tournament_job, error_handler,
 )
 
 logging.basicConfig(
@@ -105,8 +106,20 @@ async def post_init(app: Application):
             name="idle_nudge",
         )
         log.info(f"⏰ Idle nudge job scheduled every {IDLE_NUDGE_CHECK}s")
+
+        # Weekly tournament — Sunday 23:55 UTC.
+        # NOTE: PTB's JobQueue.run_daily `days` tuple is 0=Monday..6=Sunday
+        # in python-telegram-bot 21.x. Double-check against your installed
+        # version if you ever bump python-telegram-bot.
+        app.job_queue.run_daily(
+            weekly_tournament_job,
+            time=dt.time(hour=23, minute=55, tzinfo=dt.timezone.utc),
+            days=(6,),
+            name="weekly_tournament",
+        )
+        log.info("🏆 Weekly tournament job scheduled — Sundays 23:55 UTC")
     else:
-        log.warning("JobQueue not available — idle nudge disabled.")
+        log.warning("JobQueue not available — idle nudge + weekly tournament disabled.")
 
 
 async def post_shutdown(app: Application):
