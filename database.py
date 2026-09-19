@@ -230,6 +230,32 @@ async def reset_group_board(chat_id: int):
     await db.leaderboard.delete_many({"chat_id": chat_id})
 
 
+# ── Weekly tournament ────────────────────────────────────────────
+
+async def set_group_weekly_champion(chat_id: int, user_id: int, name: str, score: int):
+    await db.groups.update_one(
+        {"chat_id": chat_id},
+        {"$set": {"weekly_champion": {"user_id": user_id, "name": name, "score": score}}},
+    )
+
+
+async def get_group_weekly_champion(chat_id: int) -> dict:
+    doc = await db.groups.find_one({"chat_id": chat_id}, {"weekly_champion": 1})
+    return (doc or {}).get("weekly_champion") or {}
+
+
+async def set_global_weekly_champion(user_id: int, name: str, score: int):
+    await db.meta.update_one(
+        {"_id": "global_weekly_champion"},
+        {"$set": {"user_id": user_id, "name": name, "score": score}},
+        upsert=True,
+    )
+
+
+async def get_global_weekly_champion() -> dict:
+    return await db.meta.find_one({"_id": "global_weekly_champion"}) or {}
+
+
 # ── Bot stats ────────────────────────────────────────────────────
 
 async def bot_stats() -> dict:
