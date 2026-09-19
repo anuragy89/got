@@ -232,7 +232,7 @@ def round_end(summary, missed, theme_name, round_num=1, max_rounds=1, round_comp
 
     return q1 + "\n" + q2 + "\n" + q3
 
-def leaderboard_text(rows, title) -> str:
+def leaderboard_text(rows, title, champion_id=None) -> str:
     if not rows:
         return (
             f"{ICO_TROPHY()} <b>{title}</b>\n\n"
@@ -249,8 +249,41 @@ def leaderboard_text(rows, title) -> str:
         wf      = row.get("words_found", 0)
         uid     = row.get("user_id")
         name    = row.get("name", "Player")
+        crown   = " 👑" if champion_id and uid == champion_id else ""
         mention = f'<a href="tg://user?id={uid}">{name}</a>' if uid else f"<b>{name}</b>"
-        lines.append(f"{med} {mention}: <b>{row['score']} pts</b>  <i>({wf} words)</i>")
+        lines.append(f"{med} {mention}{crown}: <b>{row['score']} pts</b>  <i>({wf} words)</i>")
+    if champion_id and not any(r.get("user_id") == champion_id for r in rows):
+        lines.append("")
+        lines.append("👑 <i>= this week's champion</i>")
+    return "\n".join(lines)
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  WEEKLY TOURNAMENT ANNOUNCEMENT
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+def weekly_tournament_announcement(rows, scope_label: str) -> str:
+    if not rows:
+        return (
+            f"🏆 <b>Weekly Tournament — {scope_label}</b>\n\n"
+            f"<i>No one played this week — be the first next week!</i>"
+        )
+    champ = rows[0]
+    lines = [
+        f"👑 <b>Weekly Tournament Results</b> 👑",
+        f"<i>{scope_label}</i>",
+        "",
+        f"🏆 Champion: <b>{champ['name']}</b> — <b>{champ['score']} pts</b>",
+        "",
+        "<b>--- Top 3 This Week ---</b>",
+    ]
+    for i, row in enumerate(rows[:3]):
+        med = MEDALS[i] if i < 3 else f"{i+1}."
+        lines.append(
+            f"{med} <b>{row['name']}</b> — {row['score']} pts "
+            f"<i>({row.get('words_found', 0)} words)</i>"
+        )
+    lines.append("")
+    lines.append(f"{ICO_CROWN()} The board resets — new week, new race! Type /newgame to compete.")
     return "\n".join(lines)
 
 
@@ -344,3 +377,4 @@ IDLE_NUDGES = [
         f"Start a word grid, get everyone competing — /newgame now!"
     ),
 ]
+
