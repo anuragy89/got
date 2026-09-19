@@ -1,25 +1,23 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from config import BOT_INVITE_LINK, SUPPORT_GROUP, UPDATES_CHANNEL, USE_PREMIUM_EMOJI, \
-    PEMOJI_ROCKET, PEMOJI_LIGHTNING, PEMOJI_JOYSTICK, PEMOJI_FIRE, PEMOJI_TROPHY, PEMOJI_STAR
+from config import BOT_INVITE_LINK, SUPPORT_GROUP, UPDATES_CHANNEL
 from puzzle import THEMES, THEME_LIST
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  PREMIUM EMOJI HELPER (for buttons)
+#  MINIMAL TEXT-STYLE ICONS
+#  Thin geometric glyphs instead of full-colour
+#  emoji — matches the flat "Replay / Pause /
+#  Skip / Queue" button look.
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-def _pe(eid, fallback):
-    if USE_PREMIUM_EMOJI:
-        return f'<tg-emoji emoji-id="{eid}">{fallback}</tg-emoji>'
-    return fallback
-
-
-def _BTN_AUTO():      return "🚀"
-def _BTN_MANUAL():    return "🕹️"
-def _BTN_NEXT():      return "⚡"
-def _BTN_TROPHY():    return "🏆"
-def _BTN_FIRE():      return "🔥"
-def _BTN_STAR():      return "⭐"
+ICO_PLAY   = "▸"   # start / new round / play now
+ICO_REPLAY = "↺"   # random / restart / new game
+ICO_NEXT   = "»"   # go to / skip / jump to
+ICO_LIST   = "☰"   # leaderboard / updates / queue-like
+ICO_ADD    = "+"   # add to group / add me
+ICO_HELP   = "?"   # help / support
+ICO_BACK   = "‹"   # back
+ICO_CHECK  = "✓"   # active tab marker
+ICO_EDIT   = "✎"   # manual mode
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -83,8 +81,8 @@ def round_mode_kb(game_type: str = "normal") -> InlineKeyboardMarkup:
     prefix = f"startmode:{game_type}"
     return InlineKeyboardMarkup([
         [
-            _cb(f"{_BTN_AUTO()} Automatic", f"{prefix}:auto",   style="success"),
-            _cb(f"{_BTN_MANUAL()} Manual",  f"{prefix}:manual", style="primary"),
+            _cb(f"{ICO_REPLAY} Automatic", f"{prefix}:auto",   style="success"),
+            _cb(f"{ICO_EDIT} Manual",      f"{prefix}:manual", style="primary"),
         ],
     ])
 
@@ -92,14 +90,14 @@ def round_mode_kb(game_type: str = "normal") -> InlineKeyboardMarkup:
 def start_kb() -> InlineKeyboardMarkup:
     """Buttons shown under the /start message in private chat."""
     return InlineKeyboardMarkup([
-        [_url("➕ Add to Group", BOT_INVITE_LINK, style="success")],
+        [_url(f"{ICO_ADD} Add to Group", BOT_INVITE_LINK, style="success")],
         [
-            _url("📢 Updates", UPDATES_CHANNEL),
-            _url("🆘 Support", SUPPORT_GROUP),
+            _url(f"{ICO_LIST} Updates", UPDATES_CHANNEL),
+            _url(f"{ICO_HELP} Support", SUPPORT_GROUP),
         ],
         [
-            _cb("❓ Help",         "cb:help"),
-            _cb("🏆 Global Board", "cb:globalboard"),
+            _cb(f"{ICO_HELP} Help",         "cb:help"),
+            _cb(f"{ICO_LIST} Global Board", "cb:globalboard"),
         ],
     ])
 
@@ -113,21 +111,21 @@ def theme_kb() -> InlineKeyboardMarkup:
             rows.append(row); row = []
     if row:
         rows.append(row)
-    rows.append([_cb("🎲 Random Theme", "theme:random", style="success")])
+    rows.append([_cb(f"{ICO_REPLAY} Random Theme", "theme:random", style="success")])
     return InlineKeyboardMarkup(rows)
 
 
 def game_action_kb() -> InlineKeyboardMarkup:
     """Single button under the grid image — Add Me only."""
     return InlineKeyboardMarkup([
-        [_url("➕ Add Me", BOT_INVITE_LINK, style="success")],
+        [_url(f"{ICO_ADD} Add Me", BOT_INVITE_LINK, style="success")],
     ])
 
 
 def hard_action_kb() -> InlineKeyboardMarkup:
     """Single button under the hard mode grid image — Add Me only."""
     return InlineKeyboardMarkup([
-        [_url("➕ Add Me", BOT_INVITE_LINK, style="success")],
+        [_url(f"{ICO_ADD} Add Me", BOT_INVITE_LINK, style="success")],
     ])
 
 
@@ -142,10 +140,10 @@ def word_found_kb(grid_msg_id: int,
     link = _grid_url(grid_msg_id, chat_username, chat_id_int)
     if link:
         return InlineKeyboardMarkup([[
-            _url("🔠 Go to Grid ➡️", link, style="success"),
+            _url(f"{ICO_NEXT} Go to Grid", link, style="success"),
         ]])
     return InlineKeyboardMarkup([[
-        _cb("🔠 Go to Grid ➡️", f"cb:gotogrid:{grid_msg_id}", style="success"),
+        _cb(f"{ICO_NEXT} Go to Grid", f"cb:gotogrid:{grid_msg_id}", style="success"),
     ]])
 
 
@@ -154,12 +152,12 @@ def next_round_kb(next_round: int, theme_key: str, is_hard: bool = False) -> Inl
     mode = "hard" if is_hard else "normal"
     return InlineKeyboardMarkup([
         [
-            _cb(f"{_BTN_NEXT()} Start Round {next_round}",
+            _cb(f"{ICO_PLAY} Start Round {next_round}",
                 f"nextround:{theme_key}:{next_round}:{mode}", style="danger"),
         ],
         [
-            _cb(f"{_BTN_TROPHY()} Leaderboard", "cb:leaderboard", style="primary"),
-            _url("➕ Add Me",      BOT_INVITE_LINK,  style="success"),
+            _cb(f"{ICO_LIST} Leaderboard", "cb:leaderboard", style="primary"),
+            _url(f"{ICO_ADD} Add Me",      BOT_INVITE_LINK,  style="success"),
         ],
     ])
 
@@ -168,8 +166,8 @@ def round_over_no_next_kb() -> InlineKeyboardMarkup:
     """After timeout — no Next Round button."""
     return InlineKeyboardMarkup([
         [
-            _cb("🏆 Leaderboard", "cb:leaderboard", style="primary"),
-            _url("➕ Add Me",      BOT_INVITE_LINK,  style="success"),
+            _cb(f"{ICO_LIST} Leaderboard", "cb:leaderboard", style="primary"),
+            _url(f"{ICO_ADD} Add Me",      BOT_INVITE_LINK,  style="success"),
         ],
     ])
 
@@ -178,12 +176,12 @@ def final_round_kb() -> InlineKeyboardMarkup:
     """After game over — Leaderboard, Updates, New Game, Add Me."""
     return InlineKeyboardMarkup([
         [
-            _cb("🏆 Leaderboard",  "cb:leaderboard",  style="primary"),
-            _url("📢 Updates",     UPDATES_CHANNEL,   style="primary"),
+            _cb(f"{ICO_LIST} Leaderboard", "cb:leaderboard",  style="primary"),
+            _url(f"{ICO_LIST} Updates",    UPDATES_CHANNEL,   style="primary"),
         ],
         [
-            _cb("🎮 New Game", "theme:random",   style="success"),
-            _url("➕ Add Me",   BOT_INVITE_LINK, style="success"),
+            _cb(f"{ICO_REPLAY} New Game", "theme:random",   style="success"),
+            _url(f"{ICO_ADD} Add Me",     BOT_INVITE_LINK,  style="success"),
         ],
     ])
 
@@ -192,18 +190,18 @@ def leaderboard_kb(next_round: int = 0, theme_key: str = "", is_hard: bool = Fal
                    time_filter: str = "alltime") -> InlineKeyboardMarkup:
     """
     Group leaderboard keyboard.
-    Row 1: [Current Chat ✅]  [🌍 Global]
-    Row 2: [Today]  [Week]  [All Time ✅]   (active tab gets ✅)
-    Row 3: [🎮 Play New Game]  (green)
+    Row 1: [Current Chat ✓]  [Global]
+    Row 2: [Today]  [Week]  [All Time ✓]   (active tab gets ✓)
+    Row 3: [Play New Game]
     """
-    today_lbl   = "📅 Today ✅"   if time_filter == "today"   else "📅 Today"
-    week_lbl    = "📆 Week ✅"    if time_filter == "week"    else "📆 Week"
-    alltime_lbl = "🏆 All Time ✅" if time_filter == "alltime" else "🏆 All Time"
+    today_lbl   = f"Today {ICO_CHECK}"   if time_filter == "today"   else "Today"
+    week_lbl    = f"Week {ICO_CHECK}"    if time_filter == "week"    else "Week"
+    alltime_lbl = f"All Time {ICO_CHECK}" if time_filter == "alltime" else "All Time"
 
     rows = [
         [
-            _cb("📍 Current Chat ✅", "lb:chat:alltime"),
-            _cb("🌍 Global",          "lb:global:alltime"),
+            _cb(f"Current Chat {ICO_CHECK}", "lb:chat:alltime"),
+            _cb("Global",                    "lb:global:alltime"),
         ],
         [
             _cb(today_lbl,   f"lb:chat:{time_filter if time_filter=='today' else 'today'}"),
@@ -211,7 +209,7 @@ def leaderboard_kb(next_round: int = 0, theme_key: str = "", is_hard: bool = Fal
             _cb(alltime_lbl, "lb:chat:alltime"),
         ],
         [
-            _cb("🎮 Play New Game", "theme:random", style="success"),
+            _cb(f"{ICO_PLAY} Play New Game", "theme:random", style="success"),
         ],
     ]
     return InlineKeyboardMarkup(rows)
@@ -221,18 +219,18 @@ def globalboard_kb(next_round: int = 0, theme_key: str = "", is_hard: bool = Fal
                    time_filter: str = "alltime") -> InlineKeyboardMarkup:
     """
     Global leaderboard keyboard.
-    Row 1: [Current Chat]  [🌍 Global ✅]
-    Row 2: [Today]  [Week]  [All Time ✅]
-    Row 3: [🎮 Play New Game]  (green)
+    Row 1: [Current Chat]  [Global ✓]
+    Row 2: [Today]  [Week]  [All Time ✓]
+    Row 3: [Play New Game]
     """
-    today_lbl   = "📅 Today ✅"   if time_filter == "today"   else "📅 Today"
-    week_lbl    = "📆 Week ✅"    if time_filter == "week"    else "📆 Week"
-    alltime_lbl = "🏆 All Time ✅" if time_filter == "alltime" else "🏆 All Time"
+    today_lbl   = f"Today {ICO_CHECK}"   if time_filter == "today"   else "Today"
+    week_lbl    = f"Week {ICO_CHECK}"    if time_filter == "week"    else "Week"
+    alltime_lbl = f"All Time {ICO_CHECK}" if time_filter == "alltime" else "All Time"
 
     rows = [
         [
-            _cb("📍 Current Chat",  "lb:chat:alltime"),
-            _cb("🌍 Global ✅",     "lb:global:alltime"),
+            _cb("Current Chat",               "lb:chat:alltime"),
+            _cb(f"Global {ICO_CHECK}",        "lb:global:alltime"),
         ],
         [
             _cb(today_lbl,   f"lb:global:{time_filter if time_filter=='today' else 'today'}"),
@@ -240,7 +238,7 @@ def globalboard_kb(next_round: int = 0, theme_key: str = "", is_hard: bool = Fal
             _cb(alltime_lbl, "lb:global:alltime"),
         ],
         [
-            _cb("🎮 Play New Game", "theme:random", style="success"),
+            _cb(f"{ICO_PLAY} Play New Game", "theme:random", style="success"),
         ],
     ]
     return InlineKeyboardMarkup(rows)
@@ -248,8 +246,8 @@ def globalboard_kb(next_round: int = 0, theme_key: str = "", is_hard: bool = Fal
 
 def back_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[
-        _cb("🎮 Play Now", "theme:random", style="success"),
-        _cb("« Back",      "cb:start"),                                  # neutral
+        _cb(f"{ICO_PLAY} Play Now", "theme:random", style="success"),
+        _cb(f"{ICO_BACK} Back",     "cb:start"),                                  # neutral
     ]])
 
 
@@ -257,5 +255,5 @@ def me_kb(in_group: bool = False) -> InlineKeyboardMarkup:
     """Button under the /me profile card — single Help button that opens bot DM."""
     from config import BOT_USERNAME
     return InlineKeyboardMarkup([[
-        _url("❓ Help & Commands", f"https://t.me/{BOT_USERNAME}?start=help", style="primary"),
+        _url(f"{ICO_HELP} Help & Commands", f"https://t.me/{BOT_USERNAME}?start=help", style="primary"),
     ]])
